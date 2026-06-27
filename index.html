@@ -412,7 +412,12 @@ const THINKING_EXTRA = {
   "grok-3-mini-latest": [{ reasoning_effort:"high" }, {}],
 };
 let cfg = { system:"", provider:"deepseek", model:"deepseek-chat", temp:1.0, maxChars:20, maxLines:3, collapsedIds:[], thinking:false };
-let keyStatus = {};
+let keyStatus = {};   // { provider: bool } — 仅用于 UI 状态，从 realKeys 派生
+let realKeys  = {};   // { provider: key_string } — 实际 key，仅存前端 localStorage
+
+function syncKeyStatus(){
+  Object.keys(PROV_DEFS).forEach(p=>{ keyStatus[p]=!!realKeys[p]; });
+}
 let nodes = {}, rootId = "root", selId = "root";
 let uidc = 0;
 const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
@@ -1022,6 +1027,7 @@ async function streamNode(node){
   const payload={
     provider:cfg.provider, model:cfg.model, temperature:cfg.temp||undefined,
     messages:buildMessages(node),
+    key:realKeys[cfg.provider]||undefined,
     ...thinkingExtra,
   };
 
@@ -1325,15 +1331,12 @@ function renderPdet(){
         return;
       }
 
-      // 2. 验证通过才保存
-      const r=await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},
-                                      body:JSON.stringify({provider:sProv,key})});
-      const j=await r.json();
-      if(j.keys){ keyStatus=j.keys; }
-      // 同时写入 localStorage 持久化
+      // 2. 验证通过：只存前端，不发服务器（多用户隔离）
+      realKeys[sProv]=key;
       const lsKeys=JSON.parse(localStorage.getItem(LS_KEYS)||"{}");
       lsKeys[sProv]=key;
       localStorage.setItem(LS_KEYS,JSON.stringify(lsKeys));
+      syncKeyStatus();
       document.getElementById("sKeyInput").value="";
       document.getElementById("sKeyDot").className="pdot"+(keyStatus[sProv]?" ok":"");
       renderPgrid(); setKeyPill();
@@ -1468,14 +1471,10 @@ document.addEventListener("mousedown",(e)=>{
   renderAll(); fit();
   whenMathJax(()=>typeset(document.getElementById("conv")));
   try{
-    // 先把 localStorage 里的 key 恢复到服务器
-    const lsKeys=JSON.parse(localStorage.getItem(LS_KEYS)||"{}");
-    for(const [p,k] of Object.entries(lsKeys)){
-      if(k) await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},
-                                    body:JSON.stringify({provider:p,key:k})}).catch(()=>{});
-    }
-    const s=await (await fetch("/api/status")).json();
-    if(s.keys) keyStatus=s.keys;
+    // key 只存前端，无需恢复到服务器
+    realKeys=JSON.parse(localStorage.getItem(LS_KEYS)||"{}");
+    syncKeyStatus();
+    await fetch("/api/status"); // 仅用于检测服务器是否在线
     setKeyPill();
     if(!keyStatus[cfg.provider]) openSettings();
   }catch(e){

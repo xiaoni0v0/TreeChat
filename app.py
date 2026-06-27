@@ -193,12 +193,13 @@ class Handler(BaseHTTPRequestHandler):
         provider = (data.get("provider") or "deepseek").strip()
         if provider not in PROVIDERS:
             return self._send(400, {"error": "未知提供商: " + provider})
-        api_key = STATE["keys"].get(provider, "")
+        # key 优先来自请求体（每用户独立），没有则降级到服务端环境变量
+        api_key = (data.get("key") or STATE["keys"].get(provider, "")).strip()
         if not api_key:
             return self._send(401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider})
 
-        # 透传前端 payload，只去掉仅供路由用的 provider 字段
-        payload = {k: v for k, v in data.items() if k != "provider"}
+        # 透传前端 payload，去掉仅供路由用的字段
+        payload = {k: v for k, v in data.items() if k not in ("provider", "key")}
         payload["stream"] = True
         payload.setdefault("model", "deepseek-chat")
         payload.setdefault("messages", [])
