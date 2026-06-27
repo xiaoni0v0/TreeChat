@@ -126,6 +126,16 @@
   .composer textarea:focus{border-color:var(--accent)}
   .composer .send-row{display:flex;gap:8px;align-items:center}
   .composer .send-row .spacer{flex:1}
+  .attach-preview{display:flex;gap:8px;flex-wrap:wrap;padding:2px 0}
+  .attach-thumb{position:relative;display:inline-block}
+  .attach-thumb img{width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
+  .attach-rm{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;
+    background:var(--danger);color:#fff;font-size:11px;border:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+  .msg-img-strip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .msg-img{max-width:220px;max-height:200px;border-radius:8px;border:1px solid var(--line);
+    cursor:pointer;display:block}
+  .msg-img:hover{opacity:.85}
 
   /* ---------- modal ---------- */
   .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
@@ -275,9 +285,17 @@ window.MathJax = {
         <button class="btn ghost" id="delBtn" style="padding:4px 9px;font-size:12px">删除此子树</button>
       </div>
       <textarea id="input" placeholder="输入消息，Enter 发送 / Shift+Enter 换行 …"></textarea>
+      <div id="attachPreview" class="attach-preview" style="display:none"></div>
       <div class="send-row">
         <span class="row" style="color:var(--muted);font-size:12px">当前分支深度 <b id="depthInfo" style="color:var(--text);margin-left:4px">0</b></span>
         <span class="spacer"></span>
+        <button class="btn ghost" id="attachBtn" title="附加图片（或直接粘贴）" style="padding:4px 8px">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
+        <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
         <button class="btn" id="stopBtn" style="display:none">停止</button>
         <button class="btn primary" id="sendBtn">发送 ↵</button>
       </div>
@@ -410,8 +428,8 @@ function descendants(id){
   while(stack.length){ const c = stack.pop(); out.push(c); stack.push(...nodes[c].children); }
   return out;
 }
-function addChild(parentId, user){
-  const n = { id:uid(), parent:parentId, user, reply:"", reasoning:"", children:[], pending:true };
+function addChild(parentId, user, attachments=[]){
+  const n = { id:uid(), parent:parentId, user, reply:"", reasoning:"", children:[], pending:true, attachments };
   nodes[n.id] = n; nodes[parentId].children.push(n.id);
   return n;
 }
@@ -626,7 +644,7 @@ function renderConv(){
   conv.innerHTML = "";
   if(cfg.system){ conv.appendChild(mkMsg("system","SYSTEM", cfg.system)); }
   path.forEach(n=>{
-    if(n.user != null) conv.appendChild(mkMsg("user","你", n.user, false, n.user));
+    if(n.user != null) conv.appendChild(mkMsg("user","你", n.user, false, n.user, null, n.attachments));
     if(n.id !== rootId){
       if(n.reasoning) conv.appendChild(mkThink(n.reasoning));
       const done = !n.pending;
@@ -679,13 +697,23 @@ function mkRegenBtn(fn){
   btn.addEventListener("click",fn);
   return btn;
 }
-function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn){
+function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, attachments){
   const d = document.createElement("div"); d.className = "msg "+kind;
   const w = document.createElement("div"); w.className="who"; w.textContent = who;
+  d.appendChild(w);
+  if(attachments && attachments.length){
+    const strip = document.createElement("div"); strip.className="msg-img-strip";
+    attachments.forEach(a=>{
+      const img = document.createElement("img"); img.src=a.base64; img.className="msg-img";
+      img.onclick=()=>{ window.open(a.base64); };
+      strip.appendChild(img);
+    });
+    d.appendChild(strip);
+  }
   const b = document.createElement("div"); b.className="bubble";
   if(asMarkdown){ b.classList.add("md"); b.innerHTML = mdToHtml(text); }
   else { b.textContent = text; }
-  d.appendChild(w); d.appendChild(b);
+  d.appendChild(b);
   if(copySrc != null || regenFn != null){
     const act = document.createElement("div"); act.className = "msg-actions";
     if(copySrc != null) act.appendChild(mkCopyBtn("复制","复制原文",copySrc));
@@ -896,14 +924,42 @@ document.getElementById("zoomOut").onclick=()=>{ view.s=Math.max(0.3,view.s*0.87
    发送 / 流式接收
    ========================================================= */
 const activeStreams=new Map(); // nodeId -> AbortController
+let pendingAttachments=[]; // [{mimeType, base64}] — 待发送的图片
+
+function renderAttachPreview(){
+  const strip=document.getElementById("attachPreview");
+  if(!pendingAttachments.length){ strip.style.display="none"; strip.innerHTML=""; return; }
+  strip.style.display="flex";
+  strip.innerHTML="";
+  pendingAttachments.forEach((a,i)=>{
+    const thumb=document.createElement("div"); thumb.className="attach-thumb";
+    const img=document.createElement("img"); img.src=a.base64;
+    const rm=document.createElement("button"); rm.className="attach-rm"; rm.textContent="×";
+    rm.onclick=()=>{ pendingAttachments.splice(i,1); renderAttachPreview(); };
+    thumb.appendChild(img); thumb.appendChild(rm);
+    strip.appendChild(thumb);
+  });
+}
+function addAttachment(file){
+  if(!file||!file.type.startsWith("image/")) return;
+  const reader=new FileReader();
+  reader.onload=e=>{ pendingAttachments.push({mimeType:file.type,base64:e.target.result}); renderAttachPreview(); };
+  reader.readAsDataURL(file);
+}
 
 function buildMessages(node){
   const msgs=[];
   if(cfg.system) msgs.push({role:"system", content:cfg.system});
   pathTo(node.id).forEach(n=>{
     if(n.id===rootId) return;
-    if(n.user!=null) msgs.push({role:"user", content:n.user});
-    if(n.reply)      msgs.push({role:"assistant", content:n.reply});
+    if(n.user!=null){
+      const atts=n.attachments||[];
+      const content=atts.length
+        ? [...atts.map(a=>({type:"image_url",image_url:{url:a.base64}})),{type:"text",text:n.user}]
+        : n.user;
+      msgs.push({role:"user", content});
+    }
+    if(n.reply) msgs.push({role:"assistant", content:n.reply});
   });
   return msgs;
 }
@@ -1028,10 +1084,12 @@ async function send(){
   if(nodes[selId]&&nodes[selId].pending) return;
   const ta=document.getElementById("input");
   const text=ta.value.trim();
-  if(!text) return;
+  if(!text && !pendingAttachments.length) return;
   if((cfg.collapsedIds||[]).includes(selId))
     cfg.collapsedIds=cfg.collapsedIds.filter(id=>id!==selId);
-  const node=addChild(selId,text);
+  const atts=[...pendingAttachments];
+  pendingAttachments=[]; renderAttachPreview();
+  const node=addChild(selId,text,atts);
   ta.value=""; selId=node.id; renderAll(); toggleSending(true);
   await streamNode(node);
 }
@@ -1041,7 +1099,7 @@ async function regen(n){
   const parentId=n.parent;
   if((cfg.collapsedIds||[]).includes(parentId))
     cfg.collapsedIds=cfg.collapsedIds.filter(id=>id!==parentId);
-  const newNode=addChild(parentId,n.user);
+  const newNode=addChild(parentId,n.user,n.attachments||[]);
   selId=newNode.id; renderAll(); toggleSending(true);
   await streamNode(newNode);
 }
@@ -1058,6 +1116,14 @@ document.getElementById("stopBtn").onclick=()=>{ const ac=activeStreams.get(selI
 document.getElementById("sendBtn").onclick=send;
 document.getElementById("input").addEventListener("keydown",(e)=>{
   if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }
+});
+document.getElementById("attachBtn").onclick=()=>document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange=e=>{ [...e.target.files].forEach(addAttachment); e.target.value=""; };
+document.getElementById("input").addEventListener("paste",e=>{
+  const imgs=[...(e.clipboardData?.items||[])].filter(it=>it.type.startsWith("image/"));
+  if(!imgs.length) return;
+  e.preventDefault();
+  imgs.forEach(it=>addAttachment(it.getAsFile()));
 });
 document.getElementById("delBtn").onclick=()=> tryDeleteSubtree();
 document.getElementById("copyPathBtn").onclick=(e)=>{
