@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>TreeChat · 树状 AI 对话</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230e1116'/><line x1='16' y1='9' x2='8' y2='18' stroke='%233a4a5e' stroke-width='2'/><line x1='16' y1='9' x2='24' y2='18' stroke='%233a4a5e' stroke-width='2'/><line x1='8' y1='18' x2='5' y2='27' stroke='%233a4a5e' stroke-width='2'/><line x1='8' y1='18' x2='12' y2='27' stroke='%233a4a5e' stroke-width='2'/><line x1='24' y1='18' x2='24' y2='27' stroke='%233a4a5e' stroke-width='2'/><circle cx='8' cy='18' r='3.5' fill='%234f9dff'/><circle cx='24' cy='18' r='3.5' fill='%234f9dff'/><circle cx='5' cy='27' r='2.5' fill='%237c5cff'/><circle cx='12' cy='27' r='2.5' fill='%234f9dff'/><circle cx='24' cy='27' r='2.5' fill='%237c5cff'/><circle cx='16' cy='9' r='4.5' fill='%234f9dff'/></svg>">
 <style>
   :root{
     color-scheme: dark;
@@ -37,6 +38,7 @@
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.primary:hover{filter:brightness(1.1)}
   .btn.ghost{background:transparent}
+  .btn.ghost.active{background:rgba(79,157,255,.15);color:var(--accent);border-color:var(--accent)}
   .pill{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer}
   .pill .ind{width:8px;height:8px;border-radius:50%;background:var(--danger)}
   .pill.ok .ind{background:var(--ok)}
@@ -75,8 +77,14 @@
   .msg.user .bubble{background:var(--user);border-bottom-right-radius:4px;max-width:88%}
   .msg.ai .bubble{background:var(--ai);border:1px solid var(--line);border-bottom-left-radius:4px;max-width:96%}
   .msg.system .bubble{background:transparent;border:1px dashed var(--line);color:var(--muted);font-size:13px}
-  .think{font-size:12px;color:var(--muted);border-left:2px solid var(--accent2);
-    padding:4px 10px;margin:2px 0;white-space:pre-wrap;background:#161d2a;border-radius:6px;max-height:160px;overflow:auto}
+  details.think{font-size:12px;color:var(--muted);border-left:2px solid var(--accent2);
+    margin:2px 0;background:#161d2a;border-radius:6px}
+  details.think summary{padding:5px 10px;cursor:pointer;list-style:none;
+    user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:6px}
+  details.think summary::-webkit-details-marker{display:none}
+  details.think summary::before{content:"▶";font-size:9px;transition:transform .15s}
+  details.think[open] summary::before{transform:rotate(90deg)}
+  .think-body{white-space:pre-wrap;padding:0 10px 8px;max-height:200px;overflow:auto}
   .cursor-blink::after{content:"▌";color:var(--accent);animation:bk 1s steps(2) infinite}
   @keyframes bk{50%{opacity:0}}
 
@@ -289,6 +297,7 @@ window.MathJax = {
       <div class="send-row">
         <span class="row" style="color:var(--muted);font-size:12px">当前分支深度 <b id="depthInfo" style="color:var(--text);margin-left:4px">0</b></span>
         <span class="spacer"></span>
+        <button class="btn ghost" id="thinkBtn" title="开启思考模式" style="display:none;padding:4px 9px;font-size:12px">思考</button>
         <button class="btn ghost" id="attachBtn" title="附加图片（或直接粘贴）" style="padding:4px 8px">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">
             <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
@@ -390,7 +399,13 @@ const PROV_DEFS = {
 
 const LS = "treechat_v1";
 const LS_KEYS = "treechat_keys_v1"; // 存实际 key 值（仅本地）
-let cfg = { system:"", provider:"deepseek", model:"deepseek-chat", temp:1.0, maxChars:20, maxLines:3, collapsedIds:[] };
+// 支持可切换思考模式的模型 → [开启时的字段, 关闭时的字段]
+const THINKING_EXTRA = {
+  "deepseek-v4-flash":  [{ thinking:{ type:"enabled", budget_tokens:8000 } }, { thinking:{ type:"disabled" } }],
+  "deepseek-v4-pro":    [{ thinking:{ type:"enabled", budget_tokens:8000 } }, { thinking:{ type:"disabled" } }],
+  "grok-3-mini-latest": [{ reasoning_effort:"high" }, {}],
+};
+let cfg = { system:"", provider:"deepseek", model:"deepseek-chat", temp:1.0, maxChars:20, maxLines:3, collapsedIds:[], thinking:false };
 let keyStatus = {};
 let nodes = {}, rootId = "root", selId = "root";
 let uidc = 0;
@@ -403,7 +418,16 @@ function freshTree(){
 }
 
 function save(){
-  localStorage.setItem(LS, JSON.stringify({cfg, rootId, selId, nodes}));
+  // 保存前剥离 base64 附件（图片数据太大，localStorage 只有 ~5MB）
+  const lean={};
+  for(const [id,n] of Object.entries(nodes))
+    lean[id]={...n, attachments:[]};
+  try{
+    localStorage.setItem(LS, JSON.stringify({cfg, rootId, selId, nodes:lean}));
+  }catch(e){
+    if(e.name==="QuotaExceededError") console.warn("localStorage quota exceeded, skipping save");
+    else throw e;
+  }
 }
 function load(){
   try{
@@ -647,7 +671,7 @@ function renderConv(){
   path.forEach(n=>{
     if(n.user != null) conv.appendChild(mkMsg("user","你", n.user, false, n.user, null, n.attachments));
     if(n.id !== rootId){
-      if(n.reasoning) conv.appendChild(mkThink(n.reasoning));
+      if(n.reasoning) conv.appendChild(mkThink(n.reasoning, n.pending));
       const done = !n.pending;
       const regenFn = (done && n.user) ? ()=>regen(n) : null;
       const m = mkMsg("ai", n.pending && !n.reply ? "助手 · 生成中" : "助手",
@@ -762,8 +786,12 @@ function pathToMarkdown(){
   });
   return turns.join("\n\n---\n\n") + "\n";
 }
-function mkThink(text){
-  const d=document.createElement("div"); d.className="think"; d.textContent="💭 "+text; return d;
+function mkThink(text, open=false){
+  const d=document.createElement("details"); d.className="think"; d.open=open;
+  const s=document.createElement("summary"); s.textContent="💭 思考过程";
+  const b=document.createElement("div"); b.className="think-body"; b.textContent=text;
+  d.appendChild(s); d.appendChild(b);
+  return d;
 }
 
 /* =========================================================
@@ -983,9 +1011,12 @@ function _advanceOne(reply, pos){
 // 核心流式接收逻辑，send() 和 regen() 共用
 async function streamNode(node){
   const abortCtl=new AbortController(); activeStreams.set(node.id, abortCtl);
+  const thinkingPair = THINKING_EXTRA[cfg.model];
+  const thinkingExtra = thinkingPair ? thinkingPair[cfg.thinking ? 0 : 1] : {};
   const payload={
     provider:cfg.provider, model:cfg.model, temperature:cfg.temp||undefined,
     messages:buildMessages(node),
+    ...thinkingExtra,
   };
 
   // 在 try 外声明，finally 可以访问
@@ -1010,6 +1041,16 @@ async function streamNode(node){
     const convEl=document.getElementById("conv");
     const bubble=()=>convEl.querySelector('.msg.ai[data-id="'+node.id+'"] .bubble');
     { const b0=bubble(); if(b0){ b0.classList.remove("cursor-blink"); b0.classList.add("md"); } }
+    // 流式更新思考块（不重建整个 renderConv）
+    const thinkBubble=()=>{
+      const msgEl=convEl.querySelector('.msg.ai[data-id="'+node.id+'"]');
+      if(!msgEl) return null;
+      let el=msgEl.previousElementSibling;
+      if(el&&el.classList.contains("think")) return el.querySelector(".think-body");
+      el=mkThink("",true); // 流式期间默认展开
+      msgEl.parentNode.insertBefore(el,msgEl);
+      return el.querySelector(".think-body");
+    };
     const atBottom=()=>convEl.scrollHeight-convEl.scrollTop-convEl.clientHeight<80;
 
     // 每帧推进若干步，自适应当前队列长度（队列大→步长大，快速追上；队列小→步长小，逐字显示）
@@ -1061,7 +1102,10 @@ async function streamNode(node){
         if(obj.error){node.reply+="\n⚠️ "+JSON.stringify(obj.error.body||obj.error);continue;}
         const delta=obj.choices&&obj.choices[0]&&obj.choices[0].delta;
         if(!delta) continue;
-        if(delta.reasoning_content) node.reasoning+=delta.reasoning_content;
+        if(delta.reasoning_content){
+          node.reasoning+=delta.reasoning_content;
+          const te=thinkBubble(); if(te) te.textContent=node.reasoning;
+        }
         if(delta.content){ node.reply+=delta.content; startAnim(); }
       }
     }
@@ -1118,6 +1162,17 @@ document.getElementById("sendBtn").onclick=send;
 document.getElementById("input").addEventListener("keydown",(e)=>{
   if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }
 });
+function updateThinkBtn(){
+  const btn=document.getElementById("thinkBtn");
+  const supported=!!THINKING_EXTRA[cfg.model];
+  btn.style.display=supported?"inline-block":"none";
+  if(!supported) cfg.thinking=false;
+  btn.classList.toggle("active", cfg.thinking);
+  btn.title=(cfg.thinking?"关闭":"开启")+"思考模式";
+}
+document.getElementById("thinkBtn").onclick=()=>{
+  cfg.thinking=!cfg.thinking; updateThinkBtn(); save();
+};
 document.getElementById("attachBtn").onclick=()=>document.getElementById("fileInput").click();
 document.getElementById("fileInput").onchange=e=>{ [...e.target.files].forEach(addAttachment); e.target.value=""; };
 document.getElementById("input").addEventListener("paste",e=>{
@@ -1292,7 +1347,7 @@ document.getElementById("settingsSave").onclick=()=>{
   cfg.maxLines=Math.max(1,Math.min(10,parseInt(document.getElementById("sMaxLines").value)||3));
   cfg.system=document.getElementById("sSysInput").value;
   closeModal("settingsMask");
-  setKeyPill(); renderAll();
+  setKeyPill(); updateThinkBtn(); renderAll();
 };
 
 function setKeyPill(){
@@ -1403,6 +1458,7 @@ document.addEventListener("mousedown",(e)=>{
    ========================================================= */
 (async function init(){
   if(!load()){ freshTree(); }
+  updateThinkBtn();
   renderAll(); fit();
   whenMathJax(()=>typeset(document.getElementById("conv")));
   try{

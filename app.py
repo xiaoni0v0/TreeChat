@@ -197,13 +197,11 @@ class Handler(BaseHTTPRequestHandler):
         if not api_key:
             return self._send(401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider})
 
-        payload = {
-            "model": data.get("model", "deepseek-chat"),
-            "messages": data.get("messages", []),
-            "stream": True,
-        }
-        if "temperature" in data and data["temperature"] is not None:
-            payload["temperature"] = data["temperature"]
+        # 透传前端 payload，只去掉仅供路由用的 provider 字段
+        payload = {k: v for k, v in data.items() if k != "provider"}
+        payload["stream"] = True
+        payload.setdefault("model", "deepseek-chat")
+        payload.setdefault("messages", [])
 
         req = urllib.request.Request(
             PROVIDERS[provider],
