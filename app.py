@@ -236,7 +236,9 @@ class Handler(BaseHTTPRequestHandler):
         # 成功：把上游 SSE 字节流原样转发给浏览器
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")   # 禁止 nginx 缓冲 SSE
+        self.send_header("Connection", "close")        # 流结束后立即关闭连接
         self.end_headers()
         try:
             while True:

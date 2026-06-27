@@ -1100,7 +1100,7 @@ async function streamNode(node){
       animId=requestAnimationFrame(animFrame);
     }
 
-    while(true){
+    outer: while(true){
       const {value,done}=await reader.read();
       if(done) break;
       buf+=dec.decode(value,{stream:true});
@@ -1109,7 +1109,7 @@ async function streamNode(node){
         const line=buf.slice(0,idx).trim(); buf=buf.slice(idx+1);
         if(!line||!line.startsWith("data:")) continue;
         const data=line.slice(5).trim();
-        if(data==="[DONE]"){buf="";break;}
+        if(data==="[DONE]"){buf="";break outer;} // 退出外层循环，否则远程服务器会卡住
         let obj; try{obj=JSON.parse(data);}catch(e){continue;}
         if(obj.error){node.reply+="\n⚠️ "+JSON.stringify(obj.error.body||obj.error);continue;}
         const delta=obj.choices&&obj.choices[0]&&obj.choices[0].delta;
