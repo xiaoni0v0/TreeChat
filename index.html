@@ -459,7 +459,7 @@ function cardRows(n){
   const q = wrapLines(stripMd(n.user || ""), mc, qml);
   (q.length ? q : ["（无提问）"]).forEach((s,i) => rows.push({t:"q", text:(i===0?"❯ ":"   ") + s}));
   rows.push({t:"sep"});
-  const r = (n.pending && !n.reply) ? ["生成中…"] : wrapLines(stripMd(n.reply), mc, ml);
+  const r = n.pending ? ["生成中…"] : wrapLines(stripMd(n.reply), mc, ml);
   (r.length ? r : ["(空)"]).forEach(s => rows.push({t:"r", text:s}));
   return rows;
 }
@@ -570,9 +570,6 @@ function renderTree(){
       g.appendChild(tog);
     }
 
-    g.appendChild(mkTitle(id===rootId
-      ? ("System: " + (cfg.system||"(空)"))
-      : ("❯ " + (n.user||"") + "\n\n" + (n.reply||""))));
     g.addEventListener("click",(e)=>{ e.stopPropagation(); select(id); });
     gNodes.appendChild(g);
   }
@@ -597,7 +594,17 @@ function renderConv(){
       const m = mkMsg("ai", n.pending && !n.reply ? "助手 · 生成中" : "助手",
                       n.reply || (n.pending ? "" : "(空)"), done,
                       (done && n.reply) ? n.reply : null, regenFn);
-      if(n.pending) m.querySelector(".bubble").classList.add("cursor-blink");
+      if(n.pending){
+        const bub=m.querySelector(".bubble");
+        if(n.reply){
+          // 已有内容：用 mdToHtmlLive 渲染，md 类保证 white-space:normal，▌ 当光标
+          bub.classList.add("md");
+          bub.innerHTML=mdToHtmlLive(n.reply+'▌');
+        } else {
+          // 尚无内容：CSS 闪烁光标
+          bub.classList.add("cursor-blink");
+        }
+      }
       m.dataset.id = n.id;
       conv.appendChild(m);
     }
@@ -923,6 +930,7 @@ async function streamNode(node){
       if(moved){
         const b=bubble();
         if(b){
+          b.classList.add("md"); b.classList.remove("cursor-blink");
           const snap=atBottom();
           const showCursor=node.pending||processedUpTo<node.reply.length;
           b.innerHTML=mdToHtmlLive(node.reply.slice(0,processedUpTo)+(showCursor?'▌':''));
