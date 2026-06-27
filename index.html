@@ -378,14 +378,14 @@ window.MathJax = {
    cfg.collapsedIds: 折叠的节点 id 列表（该节点的子分支被隐藏）
    ========================================================= */
 const PROV_DEFS = {
-  deepseek:{ label:"DeepSeek",   models:[{id:"deepseek-chat",name:"deepseek-chat (V3)"},{id:"deepseek-reasoner",name:"deepseek-reasoner (R1)"}] },
-  openai:  { label:"OpenAI",     models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o mini"},{id:"o1",name:"o1"},{id:"o3-mini",name:"o3-mini"}] },
-  groq:    { label:"Groq",       models:[{id:"llama-3.3-70b-versatile",name:"Llama 3.3 70B"},{id:"llama-3.1-8b-instant",name:"Llama 3.1 8B"},{id:"gemma2-9b-it",name:"Gemma 2 9B"},{id:"mixtral-8x7b-32768",name:"Mixtral 8×7B"}] },
-  xai:     { label:"xAI / Grok", models:[{id:"grok-3-latest",name:"Grok 3"},{id:"grok-3-mini-latest",name:"Grok 3 Mini"},{id:"grok-2-latest",name:"Grok 2"}] },
-  mistral: { label:"Mistral",    models:[{id:"mistral-large-latest",name:"Mistral Large"},{id:"mistral-small-latest",name:"Mistral Small"},{id:"open-mistral-7b",name:"Mistral 7B"}] },
-  kimi:    { label:"Kimi",       models:[{id:"moonshot-v1-128k",name:"moonshot-v1-128k"},{id:"moonshot-v1-32k",name:"moonshot-v1-32k"},{id:"moonshot-v1-8k",name:"moonshot-v1-8k"}] },
-  zhipu:   { label:"智谱 GLM",   models:[{id:"glm-4",name:"GLM-4"},{id:"glm-4-flash",name:"GLM-4 Flash"}] },
-  qwen:    { label:"通义千问",   models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"}] },
+  deepseek:{ label:"DeepSeek",   keyUrl:"https://platform.deepseek.com/api_keys",          models:[{id:"deepseek-v4-flash",name:"DeepSeek V4 Flash"},{id:"deepseek-v4-pro",name:"DeepSeek V4 Pro"}] },
+  openai:  { label:"OpenAI",     keyUrl:"https://platform.openai.com/api-keys",             models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o mini"},{id:"o1",name:"o1"},{id:"o3-mini",name:"o3-mini"}] },
+  groq:    { label:"Groq",       keyUrl:"https://console.groq.com/keys",                    models:[{id:"llama-3.3-70b-versatile",name:"Llama 3.3 70B"},{id:"llama-3.1-8b-instant",name:"Llama 3.1 8B"},{id:"gemma2-9b-it",name:"Gemma 2 9B"},{id:"mixtral-8x7b-32768",name:"Mixtral 8×7B"}] },
+  xai:     { label:"xAI / Grok", keyUrl:"https://console.x.ai/",                            models:[{id:"grok-3-latest",name:"Grok 3"},{id:"grok-3-mini-latest",name:"Grok 3 Mini"},{id:"grok-2-latest",name:"Grok 2"}] },
+  mistral: { label:"Mistral",    keyUrl:"https://console.mistral.ai/api-keys/",             models:[{id:"mistral-large-latest",name:"Mistral Large"},{id:"mistral-small-latest",name:"Mistral Small"},{id:"open-mistral-7b",name:"Mistral 7B"}] },
+  kimi:    { label:"Kimi",       keyUrl:"https://platform.moonshot.cn/console/api-keys",    models:[{id:"moonshot-v1-128k",name:"moonshot-v1-128k"},{id:"moonshot-v1-32k",name:"moonshot-v1-32k"},{id:"moonshot-v1-8k",name:"moonshot-v1-8k"}] },
+  zhipu:   { label:"智谱 GLM",   keyUrl:"https://bigmodel.cn/usercenter/proj-mgmt/apikey", models:[{id:"glm-4",name:"GLM-4"},{id:"glm-4-flash",name:"GLM-4 Flash"}] },
+  qwen:    { label:"通义千问",   keyUrl:"https://dashscope.console.aliyun.com/apiKey",      models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"}] },
 };
 
 const LS = "treechat_v1";
@@ -1234,7 +1234,10 @@ function renderPdet(){
       <label>${p.label} · 模型（保存后生效）</label>
       <select id="sModel">${p.models.map(m=>`<option value="${m.id}"${m.id===curModel?" selected":""}>${m.name}</option>`).join("")}</select>
     </div></div>
-    <label>API Key <span style="font-weight:400;font-size:11px">（留空保持不变）</span></label>
+    <label style="display:flex;align-items:baseline;gap:8px">API Key
+      <span style="font-weight:400;font-size:11px">（留空保持不变）</span>
+      <a href="${p.keyUrl}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;font-weight:400;color:var(--accent);text-decoration:none;opacity:.85" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85">获取 Key ↗</a>
+    </label>
     <div class="pdet-keyrow">
       <input id="sKeyInput" type="password" placeholder="sk-…">
       <button class="btn" id="sKeySave">保存 Key</button>
