@@ -1,34 +1,43 @@
 # TreeChat · 树状 AI 对话
 
-**本项目大量使用 AI 辅助完成。**
+**AI 声明：本项目大量使用 AI 辅助完成。**
 
-把 AI 对话从「线性」变成「树状」：
+我苦 AI Apps 久矣，它们都是“线性”的，每当我想对某个节点进行临时提问时，都会污染上下文。又或者想多次生成，但切换起来很麻烦。
+
+这款 TreeChat 应运而生，旨在把 AI 对话从「线性」变成「树状」：
+
 - **根节点**为空（或一段系统提示）；
 - **边** = 你发送的消息；**节点** = AI 的回复；
 - 可从**任意节点**拉出一条新边继续提问（即开分支）；
 - 可**删除任意子树**；
 - 每次请求只把「根 → 当前叶子」路径上的消息喂给模型——天然裁剪上下文，省 token 也更聚焦。
 
-后端用 DeepSeek API（OpenAI 兼容），通过一个零依赖的本地 Python 代理转发，避免浏览器 CORS、也不把 key 写进前端。
-
 ## 运行
 
 需要 Python 3.7+，**无需 pip 安装任何包**。
 
 ```bash
-# 1. （可选）用环境变量提供 key，否则可在网页里填
-#    PowerShell:
-$env:DEEPSEEK_API_KEY="sk-你的key"
-#    bash:
-export DEEPSEEK_API_KEY=sk-你的key
-
-# 2. 启动
 python app.py
 ```
 
-浏览器会自动打开 `http://127.0.0.1:8000`。首次若未设置 key，会弹窗让你填（key 只存在服务端内存，不写盘）。
+浏览器会自动打开 `http://127.0.0.1:8000`。首次启动会弹出设置界面让你填写 API Key。
 
-获取 key：<https://platform.deepseek.com/api_keys>
+## 支持的模型平台
+
+在设置界面（右上角）可以切换平台和模型，并填写对应的 API Key：
+
+| 平台 | 模型 |
+|------|------|
+| DeepSeek | DeepSeek V4 Flash / V4 Pro |
+| OpenAI | GPT-4o / GPT-4o mini / o1 / o3-mini |
+| Groq | Llama 3.3 70B / Llama 3.1 8B / Gemma 2 9B / Mixtral 8×7B |
+| xAI / Grok | Grok 3 / Grok 3 Mini |
+| Mistral | Mistral Large / Small / 7B |
+| Kimi | moonshot-v1-128k / 32k / 8k |
+| 智谱 GLM | GLM-4 / GLM-4 Flash |
+| 通义千问 | Qwen Max / Plus / Turbo / VL Max / VL Plus / VL Turbo |
+
+**API Key 持久化存储在浏览器 `localStorage`，重启 Python 端后自动恢复，无需重填。**
 
 ## 操作
 
@@ -39,20 +48,33 @@ python app.py
 | 缩放 | 滚轮，或右上角 ＋ / － / 适配 |
 | 拉新分支 | 选中某节点 → 右侧输入框输入 → Enter 发送 |
 | 换行 | Shift + Enter |
-| 删除子树 | 选中节点 → 「删除此子树」 |
-| 切模型 | 顶栏下拉（deepseek-chat / deepseek-reasoner） |
-| 系统提示 | 顶栏「系统提示」 |
-| 导出 / 导入 | 顶栏按钮，JSON 文件，含整棵树 |
+| 折叠/展开节点 | 节点上的 ▼ 按钮，或快捷键 `F` |
+| 删除子树 | 「删除此子树」按钮，或快捷键 `Del` |
+| 回到根节点 | 快捷键 `H` |
+| 附加图片 | 点击输入框旁的图片按钮，或直接在输入框内粘贴（Ctrl+V） |
+| 思考模式 | 支持的模型会显示「思考」切换按钮 |
 
-对话树自动保存在浏览器 `localStorage`，刷新不丢。
+## 多模态（图片）
 
-## 文件
+支持向模型发送图片。在输入框区域点击图片图标按钮，或直接 Ctrl+V 粘贴图片。
 
-- `app.py` —— 本地服务器 + DeepSeek 流式代理（仅标准库）
-- `index.html` —— 全部前端（树可视化 + 流式对话）
+> ⚠️ **已知限制**：图片以 base64 格式临时存储在内存中，**刷新页面后图片会消失**（历史对话的文字内容不受影响）。`localStorage` 空间有限，不适合存储图片数据。
+> 如果需要长期保存图片，请使用“导出”功能，导出为 `.json` 文件，用的时候导入即可。
+>
+> 并非所有模型都支持图片输入。通义千问需使用 `Qwen VL` 系列模型（如 Qwen VL Max），普通 Qwen Max/Plus/Turbo 为纯文本模型。
 
-## 设计要点
+## 思考模式
 
-- 数据模型：`node = {id, parent, user, reply, children[]}`，把「边的内容（user 消息）」和「它指向的节点（AI 回复）」存在同一对象里。
-- 请求上下文：`pathTo(leaf)` 取根到叶路径，拼成 `system? + (user, assistant)* + user` 发给 API。
-- `deepseek-reasoner` 的 `reasoning_content` 会单独以「💭 思考」块展示。
+DeepSeek V4 Flash/Pro 和 Grok 3 Mini 支持可切换的思考模式。选中这些模型后，输入框右侧会出现「思考」按钮，点击激活后 AI 会在回复前展示思考过程（以可折叠的「💭 思考过程」框呈现）。
+
+## 并发流式输出
+
+可以同时向多个节点发送消息并同时接收回复。正在生成中的节点树卡片显示「生成中…」，可以切换到其他节点继续操作，互不干扰。
+
+## 对话树持久化
+
+对话树自动保存在浏览器 `localStorage`，刷新页面不丢失（图片附件除外）。
+
+---
+
+有任何问题都可以发 issue，作者会尽力解决。
