@@ -247,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 self.wfile.flush()
+            # 主动发送 [DONE]，确保在连接关闭前到达浏览器
+            self._sse_write("data: [DONE]\n\n")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass  # 浏览器断开（例如用户停止），正常结束
         finally:
