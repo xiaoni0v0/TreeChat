@@ -268,30 +268,56 @@ def _safe_json(s):
         return s
 
 
-PORT = 8000
-
-
 def main():
     import socket
+    import argparse
+
+    parser = argparse.ArgumentParser(description="TreeChat local server")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="bind host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8000,
+                        help="bind port (default: 8000)")
+    parser.add_argument("--server", action="store_true",
+                        help="shortcut for --host 0.0.0.0 (multi-user server mode)")
+    args = parser.parse_args()
+
+    host = "0.0.0.0" if args.server else args.host
+    port = args.port
+
     # 尝试绑定端口，失败说明端口已被占用（可能是本程序已在运行）
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        probe.bind(("127.0.0.1", PORT))
+        probe.bind((host, port))
     except OSError:
-        url = "http://127.0.0.1:%d" % PORT
+        url = "http://127.0.0.1:%d" % port
         print("TreeChat already running at %s — opening browser." % url)
         webbrowser.open(url)
         return
     finally:
         probe.close()
 
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = "http://127.0.0.1:%d" % PORT
-    print("TreeChat running at %s" % url)
+    server = ThreadingHTTPServer((host, port), Handler)
+    url = "http://127.0.0.1:%d" % port
+
+    if host == "0.0.0.0":
+        # 服务器模式：找一个局域网/公网 IP 提示用户
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            lan_ip = "<your-ip>"
+        print("TreeChat running in SERVER mode")
+        print("  Local:   http://127.0.0.1:%d" % port)
+        print("  Network: http://%s:%d" % (lan_ip, port))
+    else:
+        print("TreeChat running at %s" % url)
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
     loaded = [p for p, v in STATE["keys"].items() if v]
     print("  API keys from env: %s" % (", ".join(loaded) if loaded else "none (set in web UI)"))
     print("  Press Ctrl+C to stop.")
-    threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
