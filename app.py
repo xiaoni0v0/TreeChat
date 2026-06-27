@@ -26,10 +26,29 @@ import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-API_URL = "https://api.deepseek.com/chat/completions"
 
+PROVIDERS = {
+    "deepseek": "https://api.deepseek.com/chat/completions",
+    "openai":   "https://api.openai.com/v1/chat/completions",
+    "groq":     "https://api.groq.com/openai/v1/chat/completions",
+    "xai":      "https://api.x.ai/v1/chat/completions",
+    "mistral":  "https://api.mistral.ai/v1/chat/completions",
+    "kimi":     "https://api.moonshot.cn/v1/chat/completions",
+    "zhipu":    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+}
+_ENV_KEYS = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openai":   "OPENAI_API_KEY",
+    "groq":     "GROQ_API_KEY",
+    "xai":      "XAI_API_KEY",
+    "mistral":  "MISTRAL_API_KEY",
+    "kimi":     "KIMI_API_KEY",
+    "zhipu":    "ZHIPU_API_KEY",
+    "qwen":     "QWEN_API_KEY",
+}
 # 服务端持有的状态（不写盘）。key 可由环境变量或网页设置。
-STATE = {"api_key": os.environ.get("DEEPSEEK_API_KEY", "").strip()}
+STATE = {"keys": {p: os.environ.get(e, "").strip() for p, e in _ENV_KEYS.items()}}
 
 
 def read_index():
@@ -73,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self._send(500, {"error": "index.html not found next to app.py"})
         elif self.path == "/api/status":
-            self._send(200, {"hasKey": bool(STATE["api_key"])})
+            self._send(200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}})
         elif self.path.startswith("/lib/"):
             self._serve_static(self.path)
         else:
@@ -112,24 +131,71 @@ class Handler(BaseHTTPRequestHandler):
                 data = self._read_json()
             except Exception as e:
                 return self._send(400, {"error": "bad json: %s" % e})
+            provider = (data.get("provider") or "deepseek").strip()
             key = (data.get("key") or "").strip()
-            STATE["api_key"] = key
-            return self._send(200, {"hasKey": bool(key)})
+            if provider in STATE["keys"]:
+                STATE["keys"][provider] = key
+            return self._send(200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}})
+
+        if self.path == "/api/test-key":
+            return self._test_key()
 
         if self.path == "/api/chat":
             return self._proxy_chat()
 
         self._send(404, {"error": "not found"})
 
-    # ---------- DeepSeek 流式代理 ----------
+    # ---------- Key 验证（发一条最小非流式请求，只看状态码） ----------
+    def _test_key(self):
+        try:
+            data = self._read_json()
+        except Exception as e:
+            return self._send(400, {"error": str(e)})
+        provider = (data.get("provider") or "deepseek").strip()
+        if provider not in PROVIDERS:
+            return self._send(400, {"error": "未知提供商: " + provider})
+        api_key = (data.get("key") or STATE["keys"].get(provider, "")).strip()
+        if not api_key:
+            return self._send(400, {"error": "Key 未设置"})
+        model = (data.get("model") or "").strip()
+        payload = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": False,
+            "max_tokens": 1,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            PROVIDERS[provider], data=payload,
+            headers={"Content-Type": "application/json",
+                     "Authorization": "Bearer " + api_key},
+            method="POST",
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            resp.read()
+            return self._send(200, {"ok": True})
+        except urllib.error.HTTPError as e:
+            try:
+                body = _safe_json(e.read().decode("utf-8", "replace"))
+            except Exception:
+                body = str(e)
+            return self._send(200, {"ok": False, "status": e.code, "body": body})
+        except Exception as e:
+            return self._send(200, {"ok": False, "body": str(e)})
+
+    # ---------- 流式代理 ----------
     def _proxy_chat(self):
         try:
             data = self._read_json()
         except Exception as e:
             return self._send(400, {"error": "bad json: %s" % e})
 
-        if not STATE["api_key"]:
-            return self._send(401, {"error": "未设置 API key。请在网页右上角填写，或设置环境变量 DEEPSEEK_API_KEY。"})
+        provider = (data.get("provider") or "deepseek").strip()
+        if provider not in PROVIDERS:
+            return self._send(400, {"error": "未知提供商: " + provider})
+        api_key = STATE["keys"].get(provider, "")
+        if not api_key:
+            return self._send(401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider})
 
         payload = {
             "model": data.get("model", "deepseek-chat"),
@@ -140,11 +206,11 @@ class Handler(BaseHTTPRequestHandler):
             payload["temperature"] = data["temperature"]
 
         req = urllib.request.Request(
-            API_URL,
+            PROVIDERS[provider],
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer " + STATE["api_key"],
+                "Authorization": "Bearer " + api_key,
                 "Accept": "text/event-stream",
             },
             method="POST",
@@ -223,7 +289,8 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = "http://127.0.0.1:%d" % PORT
     print("TreeChat running at %s" % url)
-    print("  API key from env: %s" % ("yes" if STATE["api_key"] else "no (set in web UI)"))
+    loaded = [p for p, v in STATE["keys"].items() if v]
+    print("  API keys from env: %s" % (", ".join(loaded) if loaded else "none (set in web UI)"))
     print("  Press Ctrl+C to stop.")
     threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:

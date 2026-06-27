@@ -185,6 +185,30 @@
   #ctxMenu[data-mode="bg"] .ctx-node-grp{display:none}
   #ctxMenu[data-mode="node"] .ctx-bg-grp{display:none}
 
+  /* ---------- 设置弹窗扩展 ---------- */
+  #settingsMask .modal{width:560px}
+  .stab-nav{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .stab{background:none;border:none;border-bottom:2px solid transparent;padding:7px 16px;
+    margin-bottom:-1px;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit}
+  .stab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .stab-pane{display:none}
+  .stab-pane.active{display:block}
+  .pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:4px}
+  .pcard{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;
+    border:1px solid var(--line);border-radius:10px;cursor:pointer;font-size:12px;
+    color:var(--muted);transition:.15s;text-align:center;
+    user-select:none;-webkit-user-select:none}
+  .pcard:hover{border-color:var(--accent);color:var(--text)}
+  .pcard.psel{border-color:var(--accent);background:rgba(79,157,255,.08);color:var(--text)}
+  .pname{font-weight:500}
+  .pbadge{position:absolute;top:4px;right:5px;font-size:9px;color:var(--accent);
+    background:rgba(79,157,255,.15);padding:1px 4px;border-radius:4px;line-height:1.4}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--danger);flex-shrink:0}
+  .pdot.ok{background:var(--ok)}
+  .pdet{border-top:1px solid var(--line);padding-top:12px;margin-top:10px}
+  .pdet-keyrow{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .pdet-keyrow input{flex:1;min-width:0}
+
   /* ---------- 通用对话框 ---------- */
   #dialogMask .modal{width:360px}
   #dialogTitle{margin:0 0 10px;font-size:16px}
@@ -265,33 +289,37 @@ window.MathJax = {
 <div class="mask" id="settingsMask">
   <div class="modal">
     <h3>设置</h3>
-    <label>API Key &nbsp;<span style="font-weight:400"><a href="https://platform.deepseek.com/api_keys" target="_blank" style="font-size:11px">获取 →</a></span></label>
-    <input id="sKeyInput" type="password" placeholder="sk-… （留空则保持不变）">
-    <div class="row3">
-      <div>
-        <label>模型</label>
-        <select id="sModel">
-          <option value="deepseek-chat">deepseek-chat (V3)</option>
-          <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
-        </select>
-      </div>
-      <div>
-        <label>温度 (0–2)</label>
-        <input id="sTemp" type="text" placeholder="1.0">
-      </div>
+    <div class="stab-nav">
+      <button class="stab active" data-stab="model">模型 &amp; API</button>
+      <button class="stab" data-stab="conv">参数 &amp; 系统</button>
     </div>
-    <div class="row3">
-      <div>
-        <label>节点预览宽度（每行字符数，5–80）</label>
-        <input id="sMaxChars" type="number" min="5" max="80" placeholder="20">
-      </div>
-      <div>
-        <label>节点预览高度（最多行数，1–10）</label>
-        <input id="sMaxLines" type="number" min="1" max="10" placeholder="3">
-      </div>
+
+    <div class="stab-pane active" id="stab-model">
+      <div class="pgrid" id="pgrid"></div>
+      <div id="pdet"></div>
     </div>
-    <label>系统提示（留空则不发送 system 消息）</label>
-    <textarea id="sSysInput" placeholder="你是一个乐于助人的助手…（留空即可）"></textarea>
+
+    <div class="stab-pane" id="stab-conv">
+      <div class="row3">
+        <div>
+          <label>温度 (0–2)</label>
+          <input id="sTemp" type="text" placeholder="1.0">
+        </div>
+      </div>
+      <div class="row3">
+        <div>
+          <label>节点预览宽度（每行字符数，5–80）</label>
+          <input id="sMaxChars" type="number" min="5" max="80" placeholder="20">
+        </div>
+        <div>
+          <label>节点预览高度（最多行数，1–10）</label>
+          <input id="sMaxLines" type="number" min="1" max="10" placeholder="3">
+        </div>
+      </div>
+      <label>系统提示（留空则不发送 system 消息）</label>
+      <textarea id="sSysInput" placeholder="你是一个乐于助人的助手…（留空即可）"></textarea>
+    </div>
+
     <div class="actions">
       <button class="btn ghost" onclick="closeModal('settingsMask')">取消</button>
       <button class="btn primary" id="settingsSave">保存</button>
@@ -331,8 +359,20 @@ window.MathJax = {
    nodes: { id -> {id, parent, user, reply, reasoning, children:[], pending} }
    cfg.collapsedIds: 折叠的节点 id 列表（该节点的子分支被隐藏）
    ========================================================= */
+const PROV_DEFS = {
+  deepseek:{ label:"DeepSeek",   models:[{id:"deepseek-chat",name:"deepseek-chat (V3)"},{id:"deepseek-reasoner",name:"deepseek-reasoner (R1)"}] },
+  openai:  { label:"OpenAI",     models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o mini"},{id:"o1",name:"o1"},{id:"o3-mini",name:"o3-mini"}] },
+  groq:    { label:"Groq",       models:[{id:"llama-3.3-70b-versatile",name:"Llama 3.3 70B"},{id:"llama-3.1-8b-instant",name:"Llama 3.1 8B"},{id:"gemma2-9b-it",name:"Gemma 2 9B"},{id:"mixtral-8x7b-32768",name:"Mixtral 8×7B"}] },
+  xai:     { label:"xAI / Grok", models:[{id:"grok-3-latest",name:"Grok 3"},{id:"grok-3-mini-latest",name:"Grok 3 Mini"},{id:"grok-2-latest",name:"Grok 2"}] },
+  mistral: { label:"Mistral",    models:[{id:"mistral-large-latest",name:"Mistral Large"},{id:"mistral-small-latest",name:"Mistral Small"},{id:"open-mistral-7b",name:"Mistral 7B"}] },
+  kimi:    { label:"Kimi",       models:[{id:"moonshot-v1-128k",name:"moonshot-v1-128k"},{id:"moonshot-v1-32k",name:"moonshot-v1-32k"},{id:"moonshot-v1-8k",name:"moonshot-v1-8k"}] },
+  zhipu:   { label:"智谱 GLM",   models:[{id:"glm-4",name:"GLM-4"},{id:"glm-4-flash",name:"GLM-4 Flash"}] },
+  qwen:    { label:"通义千问",   models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"}] },
+};
+
 const LS = "treechat_v1";
-let cfg = { system:"", model:"deepseek-chat", temp:1.0, maxChars:20, maxLines:3, collapsedIds:[] };
+let cfg = { system:"", provider:"deepseek", model:"deepseek-chat", temp:1.0, maxChars:20, maxLines:3, collapsedIds:[] };
+let keyStatus = {};
 let nodes = {}, rootId = "root", selId = "root";
 let uidc = 0;
 const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
@@ -887,7 +927,7 @@ function _advanceOne(reply, pos){
 async function streamNode(node){
   const abortCtl=new AbortController(); activeStreams.set(node.id, abortCtl);
   const payload={
-    model:cfg.model, temperature:cfg.temp||undefined,
+    provider:cfg.provider, model:cfg.model, temperature:cfg.temp||undefined,
     messages:buildMessages(node),
   };
 
@@ -1070,40 +1110,122 @@ function tryDeleteSubtreeId(id){
 }
 function tryDeleteSubtree(){ tryDeleteSubtreeId(selId); }
 
-function openSettings(){
-  document.getElementById("sKeyInput").value="";
-  document.getElementById("sModel").value=cfg.model;
+function openSettings(tab){
+  sProv=cfg.provider;
   document.getElementById("sTemp").value=cfg.temp;
   document.getElementById("sMaxChars").value=cfg.maxChars||20;
   document.getElementById("sMaxLines").value=cfg.maxLines||3;
   document.getElementById("sSysInput").value=cfg.system||"";
+  // 默认打开"模型 & API" tab
+  document.querySelectorAll(".stab").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".stab-pane").forEach(p=>p.classList.remove("active"));
+  const activeTab=tab||"model";
+  document.querySelector(`.stab[data-stab="${activeTab}"]`).classList.add("active");
+  document.getElementById("stab-"+activeTab).classList.add("active");
+  renderPgrid(); renderPdet();
   openModal("settingsMask");
 }
 
-document.getElementById("settingsBtn").onclick=openSettings;
-document.getElementById("keyPill").onclick=openSettings;
+document.getElementById("settingsBtn").onclick=()=>openSettings();
+document.getElementById("keyPill").onclick=()=>openSettings();
 
-document.getElementById("settingsSave").onclick=async()=>{
-  const key=document.getElementById("sKeyInput").value.trim();
-  if(key){
+// ---- 设置弹窗：tab 切换 ----
+document.querySelectorAll(".stab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".stab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".stab-pane").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("stab-"+btn.dataset.stab).classList.add("active");
+  });
+});
+
+// ---- 设置弹窗：provider 网格 & 详情 ----
+let sProv="deepseek";
+
+function renderPgrid(){
+  const grid=document.getElementById("pgrid"); grid.innerHTML="";
+  Object.entries(PROV_DEFS).forEach(([id,p])=>{
+    const card=document.createElement("div");
+    card.className="pcard"+(id===sProv?" psel":"");
+    const dot=document.createElement("span"); dot.className="pdot"+(keyStatus[id]?" ok":"");
+    const nm=document.createElement("span"); nm.className="pname"; nm.textContent=p.label;
+    card.appendChild(dot); card.appendChild(nm);
+    if(id===cfg.provider){
+      const badge=document.createElement("span"); badge.className="pbadge"; badge.textContent="使用中";
+      card.appendChild(badge);
+    }
+    card.onclick=()=>{ sProv=id; renderPgrid(); renderPdet(); };
+    grid.appendChild(card);
+  });
+}
+
+function renderPdet(){
+  const p=PROV_DEFS[sProv];
+  const curModel=sProv===cfg.provider?cfg.model:p.models[0].id;
+  document.getElementById("pdet").innerHTML=`<div class="pdet">
+    <div class="row3"><div>
+      <label>${p.label} · 模型（保存后生效）</label>
+      <select id="sModel">${p.models.map(m=>`<option value="${m.id}"${m.id===curModel?" selected":""}>${m.name}</option>`).join("")}</select>
+    </div></div>
+    <label>API Key <span style="font-weight:400;font-size:11px">（留空保持不变）</span></label>
+    <div class="pdet-keyrow">
+      <input id="sKeyInput" type="password" placeholder="sk-…">
+      <button class="btn" id="sKeySave">保存 Key</button>
+      <span class="pdot${keyStatus[sProv]?" ok":""}" id="sKeyDot"></span>
+    </div>
+  </div>`;
+  document.getElementById("sKeySave").onclick=async()=>{
+    const key=document.getElementById("sKeyInput").value.trim(); if(!key) return;
+    const btn=document.getElementById("sKeySave");
+    btn.textContent="验证中…"; btn.disabled=true;
     try{
+      // 1. 先用待保存的 Key 测试（不写入 STATE）
+      const model=document.getElementById("sModel")?.value||PROV_DEFS[sProv].models[0].id;
+      const tr=await fetch("/api/test-key",{method:"POST",headers:{"Content-Type":"application/json"},
+                                            body:JSON.stringify({provider:sProv,model,key})});
+      const tj=await tr.json();
+      if(!tj.ok){
+        const detail=typeof tj.body==="object"
+          ? (tj.body?.error?.message||tj.body?.message||JSON.stringify(tj.body))
+          : (tj.body||"未知错误");
+        showDialog({title:'Key 验证失败',
+          msg:`${PROV_DEFS[sProv].label} 返回错误（${tj.status||"网络"}）：${detail}\n\n请检查 Key 是否正确。`,
+          cancelLabel:null, okLabel:'好'});
+        return;
+      }
+
+      // 2. 验证通过才保存
       const r=await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},
-                                       body:JSON.stringify({key})});
-      const j=await r.json(); setKeyPill(j.hasKey);
-    }catch(e){}
-  }
-  cfg.model=document.getElementById("sModel").value;
+                                      body:JSON.stringify({provider:sProv,key})});
+      const j=await r.json();
+      if(j.keys){ keyStatus=j.keys; }
+      document.getElementById("sKeyInput").value="";
+      document.getElementById("sKeyDot").className="pdot"+(keyStatus[sProv]?" ok":"");
+      renderPgrid(); setKeyPill();
+    }catch(e){
+      showDialog({title:'请求失败', msg:String(e), cancelLabel:null, okLabel:'好'});
+    }finally{
+      btn.textContent="保存 Key"; btn.disabled=false;
+    }
+  };
+}
+
+document.getElementById("settingsSave").onclick=()=>{
+  cfg.provider=sProv;
+  const ms=document.getElementById("sModel"); if(ms) cfg.model=ms.value;
   cfg.temp=parseFloat(document.getElementById("sTemp").value)||1.0;
   cfg.maxChars=Math.max(5,Math.min(80,parseInt(document.getElementById("sMaxChars").value)||20));
   cfg.maxLines=Math.max(1,Math.min(10,parseInt(document.getElementById("sMaxLines").value)||3));
   cfg.system=document.getElementById("sSysInput").value;
   closeModal("settingsMask");
-  renderAll();
+  setKeyPill(); renderAll();
 };
 
-function setKeyPill(has){
+function setKeyPill(){
   const p=document.getElementById("keyPill"), t=document.getElementById("keyTxt");
-  p.classList.toggle("ok",!!has); t.textContent=has?"API 已就绪":"未设置 key";
+  const has=!!keyStatus[cfg.provider];
+  p.classList.toggle("ok",has);
+  t.textContent=has?(PROV_DEFS[cfg.provider]?.label+" · 已就绪"):(PROV_DEFS[cfg.provider]?.label+" · 未设置 Key");
 }
 
 // export / import
@@ -1211,8 +1333,9 @@ document.addEventListener("mousedown",(e)=>{
   whenMathJax(()=>typeset(document.getElementById("conv")));
   try{
     const s=await (await fetch("/api/status")).json();
-    setKeyPill(s.hasKey);
-    if(!s.hasKey) openSettings();
+    if(s.keys) keyStatus=s.keys;
+    setKeyPill();
+    if(!keyStatus[cfg.provider]) openSettings();
   }catch(e){
     if(e instanceof TypeError)
       showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
