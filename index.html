@@ -142,8 +142,11 @@
     display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
   .msg-img-strip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
   .msg-img{max-width:220px;max-height:200px;border-radius:8px;border:1px solid var(--line);
-    cursor:pointer;display:block}
+    cursor:zoom-in;display:block}
   .msg-img:hover{opacity:.85}
+  #imgViewer{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;
+    align-items:center;justify-content:center;z-index:9999;cursor:zoom-out}
+  #imgViewer img{max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px #000}
 
   /* ---------- modal ---------- */
   .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
@@ -312,6 +315,9 @@ window.MathJax = {
   </div>
 </main>
 
+<!-- 图片全屏预览 -->
+<div id="imgViewer" style="display:none" onclick="this.style.display='none'"><img id="imgViewerImg"></div>
+
 <!-- settings modal -->
 <div class="mask" id="settingsMask">
   <div class="modal">
@@ -394,7 +400,7 @@ const PROV_DEFS = {
   mistral: { label:"Mistral",    keyUrl:"https://console.mistral.ai/api-keys/",             models:[{id:"mistral-large-latest",name:"Mistral Large"},{id:"mistral-small-latest",name:"Mistral Small"},{id:"open-mistral-7b",name:"Mistral 7B"}] },
   kimi:    { label:"Kimi",       keyUrl:"https://platform.moonshot.cn/console/api-keys",    models:[{id:"moonshot-v1-128k",name:"moonshot-v1-128k"},{id:"moonshot-v1-32k",name:"moonshot-v1-32k"},{id:"moonshot-v1-8k",name:"moonshot-v1-8k"}] },
   zhipu:   { label:"智谱 GLM",   keyUrl:"https://bigmodel.cn/usercenter/proj-mgmt/apikey", models:[{id:"glm-4",name:"GLM-4"},{id:"glm-4-flash",name:"GLM-4 Flash"}] },
-  qwen:    { label:"通义千问",   keyUrl:"https://dashscope.console.aliyun.com/apiKey",      models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"}] },
+  qwen:    { label:"通义千问",   keyUrl:"https://dashscope.console.aliyun.com/apiKey",      models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"},{id:"qwen-vl-max",name:"Qwen VL Max 👁"},{id:"qwen-vl-plus",name:"Qwen VL Plus 👁"},{id:"qwen-vl-turbo",name:"Qwen VL Turbo 👁"}] },
 };
 
 const LS = "treechat_v1";
@@ -730,7 +736,7 @@ function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, attachments){
     const strip = document.createElement("div"); strip.className="msg-img-strip";
     attachments.forEach(a=>{
       const img = document.createElement("img"); img.src=a.base64; img.className="msg-img";
-      img.onclick=()=>{ window.open(a.base64); };
+      img.onclick=()=>{ document.getElementById("imgViewerImg").src=a.base64; document.getElementById("imgViewer").style.display="flex"; };
       strip.appendChild(img);
     });
     d.appendChild(strip);
