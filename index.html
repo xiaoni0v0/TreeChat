@@ -378,6 +378,7 @@ function addChild(parentId, user){
 function deleteSubtree(id){
   if(id === rootId) return;
   const kill = [id, ...descendants(id)];
+  kill.forEach(k=>{ const ac=activeStreams.get(k); if(ac){ ac.abort(); activeStreams.delete(k); } });
   const par = nodes[id].parent;
   nodes[par].children = nodes[par].children.filter(c => c !== id);
   kill.forEach(k => delete nodes[k]);
@@ -612,6 +613,7 @@ function renderConv(){
     selId===rootId ? "从「根」提问" : "从选中节点拉新分支";
   document.getElementById("delBtn").style.visibility = selId===rootId ? "hidden" : "visible";
   document.getElementById("copyPathBtn").style.visibility = selId===rootId ? "hidden" : "visible";
+  toggleSending(activeStreams.has(selId));
 }
 
 function mkCopyBtn(label, title, src){
@@ -846,7 +848,7 @@ document.getElementById("zoomOut").onclick=()=>{ view.s=Math.max(0.3,view.s*0.87
 /* =========================================================
    发送 / 流式接收
    ========================================================= */
-let streaming=false, abortCtl=null;
+const activeStreams=new Map(); // nodeId -> AbortController
 
 function buildMessages(node){
   const msgs=[];
@@ -876,8 +878,7 @@ function _advanceOne(reply, pos){
 
 // 核心流式接收逻辑，send() 和 regen() 共用
 async function streamNode(node){
-  streaming=true; abortCtl=new AbortController();
-  toggleSending(true);
+  const abortCtl=new AbortController(); activeStreams.set(node.id, abortCtl);
   const payload={
     model:cfg.model, temperature:cfg.temp||undefined,
     messages:buildMessages(node),
@@ -894,7 +895,7 @@ async function streamNode(node){
     if(!resp.ok){
       const t=await resp.text();
       node.reply="⚠️ 请求失败 ("+resp.status+"): "+t;
-      node.pending=false; renderAll(); toggleSending(false); streaming=false;
+      activeStreams.delete(node.id); node.pending=false; renderAll();
       if(resp.status===401) openSettings();
       return;
     }
@@ -960,9 +961,15 @@ async function streamNode(node){
       }
     }
   }catch(e){
-    if(e.name!=="AbortError") node.reply+="\n⚠️ "+e.message;
+    if(e.name==="AbortError"){
+      // 用户主动取消，什么都不做
+    }else if(e instanceof TypeError){
+      showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
+    }else{
+      node.reply+="\n⚠️ "+e.message;
+    }
   }finally{
-    node.pending=false; streaming=false; toggleSending(false);
+    activeStreams.delete(node.id); node.pending=false;
     animRunning=false;
     if(animId){ cancelAnimationFrame(animId); animId=null; }
     renderAll();  // 最终态：完整 Markdown + MathJax 一次性排版
@@ -970,25 +977,24 @@ async function streamNode(node){
 }
 
 async function send(){
-  if(streaming) return;
+  if(nodes[selId]&&nodes[selId].pending) return;
   const ta=document.getElementById("input");
   const text=ta.value.trim();
   if(!text) return;
   if((cfg.collapsedIds||[]).includes(selId))
     cfg.collapsedIds=cfg.collapsedIds.filter(id=>id!==selId);
   const node=addChild(selId,text);
-  ta.value=""; selId=node.id; renderAll();
+  ta.value=""; selId=node.id; renderAll(); toggleSending(true);
   await streamNode(node);
 }
 
 // 重新生成：在同一父节点下挂一个相同提问的新分支
 async function regen(n){
-  if(streaming) return;
   const parentId=n.parent;
   if((cfg.collapsedIds||[]).includes(parentId))
     cfg.collapsedIds=cfg.collapsedIds.filter(id=>id!==parentId);
   const newNode=addChild(parentId,n.user);
-  selId=newNode.id; renderAll();
+  selId=newNode.id; renderAll(); toggleSending(true);
   await streamNode(newNode);
 }
 
@@ -996,7 +1002,7 @@ function toggleSending(on){
   document.getElementById("sendBtn").style.display=on?"none":"inline-block";
   document.getElementById("stopBtn").style.display=on?"inline-block":"none";
 }
-document.getElementById("stopBtn").onclick=()=>{ if(abortCtl) abortCtl.abort(); };
+document.getElementById("stopBtn").onclick=()=>{ const ac=activeStreams.get(selId); if(ac) ac.abort(); };
 
 /* =========================================================
    UI 事件
@@ -1199,7 +1205,10 @@ document.addEventListener("mousedown",(e)=>{
     const s=await (await fetch("/api/status")).json();
     setKeyPill(s.hasKey);
     if(!s.hasKey) openSettings();
-  }catch(e){}
+  }catch(e){
+    if(e instanceof TypeError)
+      showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
+  }
 })();
 </script>
 </body>
