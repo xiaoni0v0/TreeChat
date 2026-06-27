@@ -1063,7 +1063,15 @@ async function streamNode(node){
       msgEl.parentNode.insertBefore(el,msgEl);
       return el.querySelector(".think-body");
     };
-    const atBottom=()=>convEl.scrollHeight-convEl.scrollTop-convEl.clientHeight<80;
+    // scrollTop 减小 = 用户主动上滚，立刻脱钩；滚回底部才恢复
+    let pinToBottom=true, lastST=convEl.scrollTop;
+    const onScroll=()=>{
+      const cur=convEl.scrollTop;
+      if(cur < lastST-4) pinToBottom=false;           // 向上滚了 >4px
+      else if(convEl.scrollHeight-cur-convEl.clientHeight<30) pinToBottom=true; // 到底了
+      lastST=cur;
+    };
+    convEl.addEventListener("scroll",onScroll,{passive:true});
 
     // 每帧推进若干步，自适应当前队列长度（队列大→步长大，快速追上；队列小→步长小，逐字显示）
     function animFrame(){
@@ -1081,10 +1089,9 @@ async function streamNode(node){
         const b=bubble();
         if(b){
           b.classList.add("md"); b.classList.remove("cursor-blink");
-          const snap=atBottom();
           const showCursor=node.pending||processedUpTo<node.reply.length;
           b.innerHTML=mdToHtmlLive(node.reply.slice(0,processedUpTo)+(showCursor?'▌':''));
-          if(snap) convEl.scrollTop=convEl.scrollHeight;
+          if(pinToBottom) convEl.scrollTop=convEl.scrollHeight;
         }
       }
       const remaining=node.reply.length-processedUpTo;
@@ -1130,6 +1137,7 @@ async function streamNode(node){
       node.reply+="\n⚠️ "+e.message;
     }
   }finally{
+    convEl.removeEventListener("scroll",onScroll);
     activeStreams.delete(node.id); node.pending=false;
     animRunning=false;
     if(animId){ cancelAnimationFrame(animId); animId=null; }
