@@ -60,6 +60,12 @@
             padding: 0 14px;
             background: linear-gradient(180deg, #171d27, #12161d);
             border-bottom: 1px solid var(--line);
+            overflow: hidden;
+        }
+
+        /* 允许 header 内每个 flex 子项收缩到 0，防止顶栏内容宽度被浏览器用来撑宽页面最小宽度 */
+        header > * {
+            min-width: 0
         }
 
         .logo {
