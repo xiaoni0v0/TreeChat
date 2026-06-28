@@ -789,6 +789,13 @@
             opacity: .75
         }
 
+        .node.drag-ghost .card {
+            opacity: .6;
+            filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .55));
+            stroke: var(--accent);
+            stroke-width: 2
+        }
+
         .node text {
             fill: var(--text);
             font-size: 12px;
@@ -1834,6 +1841,7 @@
     }
 
     function renderTree() {
+        if (nodeDrag && nodeDrag.dragging) return; // 拖拽期间不重建 DOM
         layout();
         gEdges.innerHTML = "";
         gNodes.innerHTML = "";
@@ -1901,8 +1909,26 @@
                 g.appendChild(tog);
             }
 
+            g.addEventListener("mousedown", (e) => {
+                if (e.button !== 0 || id === rootId) return;
+                const par = nodes[nodes[id].parent];
+                if (!par || par.children.length < 2) return;
+                e.stopPropagation();
+                nodeDrag = {
+                    id, parentId: nodes[id].parent,
+                    origOrder: [...par.children],
+                    insertIdx: par.children.indexOf(id),
+                    startClientX: e.clientX, startClientY: e.clientY,
+                    origPx: nodes[id].px, origPy: nodes[id].py,
+                    dragging: false, svgEl: null, savedPositions: null
+                };
+            });
             g.addEventListener("click", (e) => {
                 e.stopPropagation();
+                if (dragHappened) {
+                    dragHappened = false;
+                    return;
+                }
                 select(id);
             });
             gNodes.appendChild(g);
@@ -2274,6 +2300,16 @@
         document.body.style.userSelect = "none";
     });
     window.addEventListener("mousemove", (e) => {
+        if (nodeDrag) {
+            if (!nodeDrag.dragging &&
+                Math.hypot(e.clientX - nodeDrag.startClientX, e.clientY - nodeDrag.startClientY) > 5) {
+                _dragActivate();
+            }
+            if (nodeDrag && nodeDrag.dragging) {
+                _dragUpdate(e.clientX, e.clientY);
+                return;
+            }
+        }
         if (pan) {
             view.tx = pan.tx + (e.clientX - pan.x);
             view.ty = pan.ty + (e.clientY - pan.y);
@@ -2289,6 +2325,7 @@
         }
     });
     window.addEventListener("mouseup", () => {
+        _dragFinish();
         pan = null;
         svg.classList.remove("grabbing");
         if (divDrag) {
@@ -2323,6 +2360,18 @@
                     // 长按 600ms 弹出右键菜单（代替桌面右键）
                     const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
                     const nid = nodeEl.dataset.id;
+                    // 有兄弟节点时记录潜在拖拽起点（移动超过 8px 则激活）
+                    const _nn = nodes[nid];
+                    if (_nn && nid !== rootId && nodes[_nn.parent]?.children.length >= 2) {
+                        nodeDrag = {
+                            id: nid, parentId: _nn.parent,
+                            origOrder: [...nodes[_nn.parent].children],
+                            insertIdx: nodes[_nn.parent].children.indexOf(nid),
+                            startClientX: cx, startClientY: cy,
+                            origPx: _nn.px, origPy: _nn.py,
+                            dragging: false, svgEl: null, savedPositions: null
+                        };
+                    }
                     lpTimer = setTimeout(() => {
                         navigator.vibrate && navigator.vibrate(40);
                         select(nid);
@@ -2348,6 +2397,21 @@
         }, {passive: false});
 
         svg.addEventListener("touchmove", (e) => {
+            // 节点拖拽重排（单指拖节点）
+            if (nodeDrag && e.touches.length === 1) {
+                const t = e.touches[0];
+                const dist = Math.hypot(t.clientX - nodeDrag.startClientX, t.clientY - nodeDrag.startClientY);
+                if (!nodeDrag.dragging && dist > 8) {
+                    clearTimeout(lpTimer);
+                    lpTimer = null;
+                    _dragActivate();
+                }
+                if (nodeDrag && nodeDrag.dragging) {
+                    e.preventDefault();
+                    _dragUpdate(t.clientX, t.clientY);
+                    return;
+                }
+            }
             if (e.touches.length > 1) {
                 clearTimeout(lpTimer);
                 lpTimer = null;
@@ -2378,6 +2442,7 @@
         svg.addEventListener("touchend", (e) => {
             clearTimeout(lpTimer);
             lpTimer = null;
+            _dragFinish();
             if (e.touches.length === 0) {
                 tPan = null;
                 tPinch = null;
@@ -2389,6 +2454,8 @@
         svg.addEventListener("touchcancel", () => {
             clearTimeout(lpTimer);
             lpTimer = null;
+            nodeDrag = null;
+            dragHappened = false;
             tPan = null;
             tPinch = null;
         }, {passive: true});
@@ -2397,6 +2464,119 @@
         document.addEventListener("touchstart", (e) => {
             if (ctxMenu.style.display === "block" && !ctxMenu.contains(e.target)) hideCtxMenu();
         }, {passive: true});
+    }
+
+    /* =========================================================
+   节点拖拽重排
+   ========================================================= */
+    let nodeDrag = null;    // 当前拖拽状态
+    let dragHappened = false; // 本次 mousedown 是否发生了真实拖拽
+
+    function _dragActivate() {
+        dragHappened = true;
+        nodeDrag.dragging = true;
+        const dragEl = gNodes.querySelector(`[data-id="${nodeDrag.id}"]`);
+        if (!dragEl) {
+            nodeDrag = null;
+            return;
+        }
+        // 保存拖前所有节点的 px/py
+        nodeDrag.savedPositions = {};
+        for (const id in nodes) nodeDrag.savedPositions[id] = {px: nodes[id].px, py: nodes[id].py};
+        // 将拖拽节点移到 gNodes 末尾，使其在 SVG 中渲染于最顶层
+        gNodes.removeChild(dragEl);
+        gNodes.appendChild(dragEl);
+        dragEl.classList.add("drag-ghost");
+        nodeDrag.svgEl = dragEl;
+        // 给所有其他可见节点加过渡动画
+        getVisibleSet().forEach(vid => {
+            if (vid === nodeDrag.id) return;
+            const vel = gNodes.querySelector(`[data-id="${vid}"]`);
+            if (vel) vel.style.transition = "transform .18s cubic-bezier(.25,.46,.45,.94)";
+        });
+    }
+
+    function _dragUpdate(clientX, clientY) {
+        if (!nodeDrag || !nodeDrag.dragging) return;
+        const dx = (clientX - nodeDrag.startClientX) / view.s;
+        const dy = (clientY - nodeDrag.startClientY) / view.s;
+        const nw = getNW();
+        // 拖拽节点跟随鼠标（水平自由，垂直轻微跟随以给予拖拽感）
+        nodeDrag.svgEl.style.transition = "none";
+        nodeDrag.svgEl.style.transform = `translate(${nodeDrag.origPx + dx}px,${nodeDrag.origPy + dy * 0.1}px)`;
+        // 根据拖拽中心 x 计算插入位置
+        const sibs = nodeDrag.origOrder.filter(id => id !== nodeDrag.id);
+        const cxDrag = nodeDrag.origPx + dx + nw / 2;
+        let newIdx = sibs.length;
+        for (let i = 0; i < sibs.length; i++) {
+            if (cxDrag < nodeDrag.savedPositions[sibs[i]].px + nw / 2) {
+                newIdx = i;
+                break;
+            }
+        }
+        if (newIdx === nodeDrag.insertIdx) return; // 插入位置未变，跳过重算
+        nodeDrag.insertIdx = newIdx;
+        // 临时顺序 → 重算布局 → 动画兄弟节点
+        const tempOrder = [...sibs];
+        tempOrder.splice(newIdx, 0, nodeDrag.id);
+        const parent = nodes[nodeDrag.parentId];
+        parent.children = tempOrder;
+        layout();
+        const visible = getVisibleSet();
+        visible.forEach(vid => {
+            if (vid === nodeDrag.id) return;
+            const vel = gNodes.querySelector(`[data-id="${vid}"]`);
+            if (vel) vel.style.transform = `translate(${nodes[vid].px}px,${nodes[vid].py}px)`;
+        });
+        _dragRebuildEdges(visible);
+        // 还原原始顺序和坐标（拖拽结束前不提交）
+        parent.children = nodeDrag.origOrder;
+        for (const id in nodes) {
+            if (nodeDrag.savedPositions[id]) {
+                nodes[id].px = nodeDrag.savedPositions[id].px;
+                nodes[id].py = nodeDrag.savedPositions[id].py;
+            }
+        }
+    }
+
+    function _dragRebuildEdges(visible) {
+        gEdges.innerHTML = "";
+        const onPath = new Set(pathTo(selId).map(n => n.id));
+        for (const id in nodes) {
+            if (!visible.has(id) || id === nodeDrag.id) continue; // 跳过拖拽节点的出边
+            const n = nodes[id];
+            const nw = getNW();
+            n.children.forEach(cid => {
+                if (!visible.has(cid) || cid === nodeDrag.id) return; // 跳过到拖拽节点的入边
+                const c = nodes[cid];
+                const x1 = n.px + nw / 2, y1 = n.py + n.h + 10;
+                const x2 = c.px + nw / 2, y2 = c.py;
+                const my = (y1 + y2) / 2;
+                gEdges.appendChild(el("path", {
+                    d: `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`,
+                    class: onPath.has(id) && onPath.has(cid) ? "edge onpath" : "edge"
+                }));
+            });
+        }
+    }
+
+    function _dragFinish() {
+        if (!nodeDrag) return;
+        const wasDragging = nodeDrag.dragging;
+        if (wasDragging) {
+            // 提交新顺序
+            const parent = nodes[nodeDrag.parentId];
+            const sibs = nodeDrag.origOrder.filter(id => id !== nodeDrag.id);
+            const finalOrder = [...sibs];
+            finalOrder.splice(nodeDrag.insertIdx, 0, nodeDrag.id);
+            parent.children = finalOrder;
+            save();
+        }
+        nodeDrag = null; // 先清除，让 renderTree 守卫放行
+        if (wasDragging) renderTree();
+        setTimeout(() => {
+            dragHappened = false;
+        }, 0);
     }
 
     function fit() {
