@@ -258,7 +258,19 @@
         .msg .who {
             font-size: 11px;
             color: var(--muted);
-            letter-spacing: .4px
+            letter-spacing: .4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px
+        }
+
+        .msg .who .ts {
+            font-size: 10px;
+            opacity: .55;
+            font-weight: 400;
+            letter-spacing: 0;
+            flex-shrink: 0
         }
 
         .bubble {
@@ -1510,6 +1522,24 @@
         },
     };
 
+    // 模型 id → 显示名称的快速查找表
+    const MODEL_NAMES = {};
+    Object.values(PROV_DEFS).forEach(p => p.models.forEach(m => {
+        MODEL_NAMES[m.id] = m.name;
+    }));
+
+    function modelLabel(modelId) {
+        return MODEL_NAMES[modelId] || modelId || "助手";
+    }
+
+    function fmtTime(ts) {
+        if (!ts) return "";
+        const d = new Date(ts), n = new Date();
+        const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+        if (d.toDateString() === n.toDateString()) return hh + ":" + mm;
+        return (d.getMonth() + 1) + "/" + (d.getDate()) + " " + hh + ":" + mm;
+    }
+
     const LS = "treechat_v1";
     const LS_KEYS = "treechat_keys_v1"; // 存实际 key 值（仅本地）
     // 支持可切换思考模式的模型 → [开启时的字段, 关闭时的字段]
@@ -1608,7 +1638,10 @@
             reasoning: "",
             children: [],
             pending: true,
-            attachments
+            attachments,
+            model: cfg.model,
+            userTime: Date.now(),
+            replyTime: null,
         };
         nodes[n.id] = n;
         nodes[parentId].children.push(n.id);
@@ -1868,14 +1901,15 @@
             conv.appendChild(mkMsg("system", "SYSTEM", cfg.system));
         }
         path.forEach(n => {
-            if (n.user != null) conv.appendChild(mkMsg("user", "你", n.user, false, n.user, null, n.attachments));
+            if (n.user != null) conv.appendChild(mkMsg("user", "你", n.user, false, n.user, null, n.attachments, fmtTime(n.userTime)));
             if (n.id !== rootId) {
                 if (n.reasoning) conv.appendChild(mkThink(n.reasoning, n.pending));
                 const done = !n.pending;
                 const regenFn = (done && n.user) ? () => regen(n) : null;
-                const m = mkMsg("ai", n.pending && !n.reply ? "助手 · 生成中" : "助手",
+                const label = modelLabel(n.model);
+                const m = mkMsg("ai", n.pending && !n.reply ? label + " · 生成中" : label,
                     n.reply || (n.pending ? "" : "(空)"), done,
-                    (done && n.reply) ? n.reply : null, regenFn);
+                    (done && n.reply) ? n.reply : null, regenFn, undefined, fmtTime(n.replyTime));
                 if (n.pending) {
                     const bub = m.querySelector(".bubble");
                     if (n.reply) {
@@ -1925,12 +1959,20 @@
         return btn;
     }
 
-    function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, attachments) {
+    function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, attachments, time) {
         const d = document.createElement("div");
         d.className = "msg " + kind;
         const w = document.createElement("div");
         w.className = "who";
-        w.textContent = who;
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = who;
+        w.appendChild(nameSpan);
+        if (time) {
+            const ts = document.createElement("span");
+            ts.className = "ts";
+            ts.textContent = time;
+            w.appendChild(ts);
+        }
         d.appendChild(w);
         if (attachments && attachments.length) {
             const strip = document.createElement("div");
@@ -2597,6 +2639,7 @@
             convEl.removeEventListener("scroll", onScroll);
             activeStreams.delete(node.id);
             node.pending = false;
+            node.replyTime = Date.now();
             animRunning = false;
             if (animId) {
                 cancelAnimationFrame(animId);
