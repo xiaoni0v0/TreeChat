@@ -2186,14 +2186,14 @@
     }
 
     function typeset(elm) {
-        if (window.MathJax && MathJax.typesetPromise) {
+        if (window.MathJax && MathJax.typeset) {
             try {
-                // 全量清除：流式期间 tex2svg→clearPromises() 会让上一次 typesetPromise 留下孤立 math item，不传参才能彻底清掉
+                // 全量清除：清除上一次 typeset 残留的 math item，避免孤立 item 干扰新排版
                 MathJax.typesetClear && MathJax.typesetClear();
             } catch (e) {
             }
-            MathJax.typesetPromise([elm]).catch(() => {
-            });
+            // 同步版 typeset：不走 whenReady，避免二次调用时内部 reset 与 typesetClear 冲突
+            MathJax.typeset([elm]);
         }
     }
 
