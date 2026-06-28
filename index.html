@@ -783,6 +783,12 @@
             stroke-dasharray: 5 4
         }
 
+        .node.incomplete .card {
+            stroke: var(--accent2);
+            stroke-dasharray: 3 3;
+            opacity: .75
+        }
+
         .node text {
             fill: var(--text);
             font-size: 12px;
@@ -1457,7 +1463,8 @@
     "use strict";
     /* =========================================================
    数据模型
-   nodes: { id -> {id, parent, user, reply, reasoning, children:[], pending} }
+   nodes: { id -> {id, parent, user, reply, reasoning, children:[], pending, completed} }
+   completed: true=正常结束, false=中途中断（可继续生成）, undefined=旧数据
    cfg.collapsedIds: 折叠的节点 id 列表（该节点的子分支被隐藏）
    ========================================================= */
     const PROV_DEFS = {
@@ -1606,6 +1613,13 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
+                // 修复意外中断：上次关闭时正在生成的节点，标为"未完成"而非永久等待
+                Object.values(nodes).forEach(n => {
+                    if (n.pending) {
+                        n.pending = false;
+                        n.completed = false;
+                    }
+                });
                 return true;
             }
         } catch (e) {
@@ -1643,6 +1657,7 @@
             reasoning: "",
             children: [],
             pending: true,
+            completed: false,
             attachments,
             model: cfg.model,
             userTime: Date.now(),
@@ -1758,7 +1773,9 @@
         const q = wrapLines(stripMd(n.user || ""), mc, qml);
         (q.length ? q : ["（无提问）"]).forEach((s, i) => rows.push({t: "q", text: (i === 0 ? "❯ " : "   ") + s}));
         rows.push({t: "sep"});
-        const r = n.pending ? ["生成中…"] : wrapLines(stripMd(n.reply), mc, ml);
+        const r = n.pending ? ["生成中…"]
+            : (!n.pending && n.completed === false && !n.reply ? ["（未完成）"]
+                : wrapLines(stripMd(n.reply), mc, ml));
         (r.length ? r : ["(空)"]).forEach(s => rows.push({t: "r", text: s}));
         return rows;
     }
@@ -1843,7 +1860,7 @@
             if (!visible.has(id)) continue;
             const n = nodes[id];
             const g = el("g", {
-                class: "node" + (id === rootId ? " root" : "") + (id === selId ? " sel" : "") + (n.pending ? " pending" : ""),
+                class: "node" + (id === rootId ? " root" : "") + (id === selId ? " sel" : "") + (n.pending ? " pending" : "") + (!n.pending && n.completed === false ? " incomplete" : ""),
                 transform: `translate(${n.px},${n.py})`,
                 "data-id": id
             });
@@ -1906,15 +1923,17 @@
             conv.appendChild(mkMsg("system", "SYSTEM", cfg.system));
         }
         path.forEach(n => {
-            if (n.user != null) conv.appendChild(mkMsg("user", "你", n.user, false, n.user, null, n.attachments, fmtTime(n.userTime)));
+            if (n.user != null) conv.appendChild(mkMsg("user", "你", n.user, false, n.user, null, null, n.attachments, fmtTime(n.userTime)));
             if (n.id !== rootId) {
                 if (n.reasoning) conv.appendChild(mkThink(n.reasoning, n.pending));
                 const done = !n.pending;
+                const incomplete = !n.pending && n.completed === false;
                 const regenFn = (done && n.user) ? () => regen(n) : null;
+                const resumeFn = (incomplete && n.user) ? () => resumeStream(n) : null;
                 const label = modelLabel(n.model);
-                const m = mkMsg("ai", n.pending && !n.reply ? label + " · 生成中" : label,
+                const m = mkMsg("ai", n.pending && !n.reply ? label + " · 生成中" : (incomplete ? label + " · 未完成" : label),
                     n.reply || (n.pending ? "" : "(空)"), done,
-                    (done && n.reply) ? n.reply : null, regenFn, undefined, fmtTime(n.replyTime));
+                    (done && n.reply) ? n.reply : null, regenFn, resumeFn, undefined, fmtTime(n.replyTime));
                 if (n.pending) {
                     const bub = m.querySelector(".bubble");
                     if (n.reply) {
@@ -1964,7 +1983,19 @@
         return btn;
     }
 
-    function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, attachments, time) {
+    function mkResumeBtn(fn) {
+        const btn = document.createElement("button");
+        btn.className = "copy-btn";
+        btn.type = "button";
+        btn.title = "继续生成（将已有内容作为上下文，让模型接续）";
+        btn.innerHTML = '<svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line>'
+            + '<polyline points="12 5 19 12 12 19"></polyline></svg><span class="t">继续生成</span>';
+        btn.style.cssText = "border-color:rgba(124,92,255,.55);color:var(--accent2)";
+        btn.addEventListener("click", fn);
+        return btn;
+    }
+
+    function mkMsg(kind, who, text, asMarkdown, copySrc, regenFn, resumeFn, attachments, time) {
         const d = document.createElement("div");
         d.className = "msg " + kind;
         const w = document.createElement("div");
@@ -2003,10 +2034,11 @@
             b.textContent = text;
         }
         d.appendChild(b);
-        if (copySrc != null || regenFn != null) {
+        if (copySrc != null || regenFn != null || resumeFn != null) {
             const act = document.createElement("div");
             act.className = "msg-actions";
             if (copySrc != null) act.appendChild(mkCopyBtn("复制", "复制原文", copySrc));
+            if (resumeFn != null) act.appendChild(mkResumeBtn(resumeFn));
             if (regenFn != null) act.appendChild(mkRegenBtn(regenFn));
             d.appendChild(act);
         }
@@ -2500,6 +2532,7 @@
 
         // 在 try 外声明，finally 可以访问
         let animId = null, animRunning = false, processedUpTo = 0;
+        let finishedNormally = false, lastAutoSave = 0;
 
         let convEl, onScroll;
         try {
@@ -2512,6 +2545,7 @@
                 node.reply = "⚠️ 请求失败 (" + resp.status + "): " + t;
                 activeStreams.delete(node.id);
                 node.pending = false;
+                finishedNormally = true;  // 错误响应不提供"继续生成"
                 renderAll();
                 if (resp.status === 401) openSettings();
                 return;
@@ -2601,6 +2635,7 @@
                         const data = line.slice(5).trim();
                         if (data === "[DONE]") {
                             buf = "";
+                            finishedNormally = true;
                             break outer;
                         } // 退出外层循环，否则远程服务器会卡住
                         let obj;
@@ -2623,6 +2658,12 @@
                         if (delta.content) {
                             node.reply += delta.content;
                             startAnim();
+                            // 节流自动存档：每 3 秒保存一次，刷新页面后可从中断处继续生成
+                            const now = Date.now();
+                            if (now - lastAutoSave > 3000) {
+                                save();
+                                lastAutoSave = now;
+                            }
                         }
                     }
                 }
@@ -2642,16 +2683,21 @@
                 node.reply += "\n⚠️ " + e.message;
             }
         } finally {
-            convEl.removeEventListener("scroll", onScroll);
+            if (convEl && onScroll) convEl.removeEventListener("scroll", onScroll);
             activeStreams.delete(node.id);
             node.pending = false;
+            node.completed = finishedNormally;
             node.replyTime = Date.now();
             animRunning = false;
             if (animId) {
                 cancelAnimationFrame(animId);
                 animId = null;
             }
-            renderAll();  // 最终态：完整 Markdown + MathJax 一次性排版
+            // 最终态：树和存储始终刷新；对话视图只在该节点位于当前选中路径时才重渲，
+            // 否则用户切到别的节点后这里的 renderConv 会导致对话区无意义闪烁
+            renderTree();
+            save();
+            if (pathTo(selId).some(n => n.id === node.id)) renderConv();
         }
     }
 
@@ -2662,11 +2708,24 @@
         if (!text && !pendingAttachments.length) return;
         if ((cfg.collapsedIds || []).includes(selId))
             cfg.collapsedIds = cfg.collapsedIds.filter(id => id !== selId);
+        // 用户从"未完成"节点继续提问，视为接受当前内容，标为已完成
+        if (nodes[selId] && nodes[selId].completed === false) nodes[selId].completed = true;
         const atts = [...pendingAttachments];
         pendingAttachments = [];
         renderAttachPreview();
         const node = addChild(selId, text, atts);
         ta.value = "";
+        selId = node.id;
+        renderAll();
+        toggleSending(true);
+        await streamNode(node);
+    }
+
+    // 继续生成：把已有 partial reply 作为 assistant 消息发给模型，让它接续
+    async function resumeStream(node) {
+        if (node.pending || activeStreams.has(node.id)) return;
+        node.pending = true;
+        node.completed = false;
         selId = node.id;
         renderAll();
         toggleSending(true);
