@@ -3,17 +3,14 @@
 """
 TreeChat - 树状 AI 对话
 -----------------------
-一个零依赖（仅用 Python 标准库）的本地服务器，作为浏览器与 DeepSeek API 之间的代理：
+一个零依赖（仅用 Python 标准库）的本地服务器，作为浏览器与各 AI API 之间的代理：
   - 浏览器只跟 localhost 通信，避免 CORS 问题；
-  - API key 保存在服务端内存，不进前端代码；
+  - API key 由前端从 localStorage 恢复并 POST 过来，服务端只在内存中持有，不读环境变量；
   - 支持流式（SSE）输出。
 
 用法：
-  1) 设置环境变量 DEEPSEEK_API_KEY（可选，也可在网页里填）：
-        Windows PowerShell:  $env:DEEPSEEK_API_KEY="sk-xxxx"
-        bash:                export DEEPSEEK_API_KEY=sk-xxxx
-  2) python app.py
-  3) 浏览器自动打开 http://127.0.0.1:8000
+  1) python app.py
+  2) 浏览器自动打开 http://127.0.0.1:8000，首次使用在设置里填写 API Key
 """
 
 import os
@@ -37,18 +34,8 @@ PROVIDERS = {
     "zhipu":    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
 }
-_ENV_KEYS = {
-    "deepseek": "DEEPSEEK_API_KEY",
-    "openai":   "OPENAI_API_KEY",
-    "groq":     "GROQ_API_KEY",
-    "xai":      "XAI_API_KEY",
-    "mistral":  "MISTRAL_API_KEY",
-    "kimi":     "KIMI_API_KEY",
-    "zhipu":    "ZHIPU_API_KEY",
-    "qwen":     "QWEN_API_KEY",
-}
-# 服务端持有的状态（不写盘）。key 可由环境变量或网页设置。
-STATE = {"keys": {p: os.environ.get(e, "").strip() for p, e in _ENV_KEYS.items()}}
+# 服务端持有的状态（内存，不写盘，不读环境变量）。key 由前端从 localStorage 恢复后 POST 过来。
+STATE = {"keys": {p: "" for p in PROVIDERS}}
 
 
 def read_index():
@@ -319,8 +306,6 @@ def main():
         print("TreeChat running at %s" % url)
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
 
-    loaded = [p for p, v in STATE["keys"].items() if v]
-    print("  API keys from env: %s" % (", ".join(loaded) if loaded else "none (set in web UI)"))
     print("  Press Ctrl+C to stop.")
     try:
         server.serve_forever()

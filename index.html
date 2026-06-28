@@ -127,7 +127,7 @@
   .copy-btn.done,.btn.done{border-color:var(--ok);color:var(--ok);opacity:1}
   .copy-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 
-  .composer{border-top:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--panel2)}
+  .composer{border-top:1px solid var(--line);padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:var(--panel2)}
   .composer .row{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
   .composer textarea{width:100%;resize:none;height:64px;background:var(--bg);color:var(--text);
     border:1px solid var(--line);border-radius:10px;padding:10px;font-family:inherit;font-size:14px;outline:none}
@@ -240,6 +240,22 @@
      ================================================================ */
   #mobileNav{display:none}
 
+  /* 拖入文件遮罩 */
+  #dropOverlay{
+    display:none;position:fixed;inset:0;z-index:500;
+    background:rgba(0,0,0,.5);
+    align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  #dropOverlay.active{display:flex}
+  #dropOverlay .drop-box{
+    border:2px dashed var(--accent);border-radius:18px;
+    padding:36px 56px;font-size:17px;font-weight:500;
+    color:var(--accent);background:rgba(79,157,255,.10);
+    animation:dropPulse .9s ease-in-out infinite alternate;
+  }
+  @keyframes dropPulse{from{opacity:.7;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+
   @media(max-width:768px){
     /* 顶栏：压缩间距让所有按钮都能显示 */
     header{gap:3px;padding:0 8px}
@@ -271,10 +287,6 @@
     .composer{padding:8px 10px}
     .composer textarea{height:52px}
     .composer .row{gap:4px}
-    #branchInfo{
-      overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
-      max-width:44vw;font-size:11px;
-    }
     #copyPathBtn{display:none}
     .send-row{gap:6px;flex-wrap:wrap}
 
@@ -376,17 +388,13 @@ window.MathJax = {
     <div class="crumbs" id="crumbs"></div>
     <div id="conv"></div>
     <div class="composer">
-      <div class="row">
-        <span id="branchInfo">从「根」提问</span>
-        <span class="spacer" style="flex:1"></span>
-        <button class="btn ghost" id="copyPathBtn" style="padding:4px 9px;font-size:12px"
-                title="复制根 → 当前节点整条路径（Markdown 原文）">复制对话</button>
-        <button class="btn ghost" id="delBtn" style="padding:4px 9px;font-size:12px">删除此子树</button>
-      </div>
       <textarea id="input" placeholder="输入消息，Enter 发送 / Shift+Enter 换行 …"></textarea>
       <div id="attachPreview" class="attach-preview" style="display:none"></div>
       <div class="send-row">
-        <span class="row" style="color:var(--muted);font-size:12px">当前分支深度 <b id="depthInfo" style="color:var(--text);margin-left:4px">0</b></span>
+        <span style="color:var(--muted);font-size:12px">深度&nbsp;<b id="depthInfo" style="color:var(--text)">0</b></span>
+        <button class="btn ghost" id="copyPathBtn" style="padding:4px 9px;font-size:12px"
+                title="复制根 → 当前节点整条路径（Markdown 原文）">复制</button>
+        <button class="btn ghost" id="delBtn" style="padding:4px 9px;font-size:12px">删除</button>
         <span class="spacer"></span>
         <button class="btn ghost" id="thinkBtn" title="开启思考模式" style="display:none;padding:4px 9px;font-size:12px">思考</button>
         <button class="btn ghost" id="attachBtn" title="附加图片（或直接粘贴）" style="padding:4px 8px">
@@ -473,6 +481,8 @@ window.MathJax = {
 
 <input type="file" id="fileIn" accept="application/json" style="display:none">
 
+<div id="dropOverlay"><div class="drop-box">⬇ 松开以导入 JSON</div></div>
+
 <!-- 移动端底部导航栏 -->
 <nav id="mobileNav">
   <button class="mtab" id="tabTree">
@@ -500,7 +510,7 @@ const PROV_DEFS = {
   mistral: { label:"Mistral",    keyUrl:"https://console.mistral.ai/api-keys/",             models:[{id:"mistral-large-latest",name:"Mistral Large"},{id:"mistral-small-latest",name:"Mistral Small"},{id:"open-mistral-7b",name:"Mistral 7B"}] },
   kimi:    { label:"Kimi",       keyUrl:"https://platform.moonshot.cn/console/api-keys",    models:[{id:"moonshot-v1-128k",name:"moonshot-v1-128k"},{id:"moonshot-v1-32k",name:"moonshot-v1-32k"},{id:"moonshot-v1-8k",name:"moonshot-v1-8k"}] },
   zhipu:   { label:"智谱 GLM",   keyUrl:"https://bigmodel.cn/usercenter/proj-mgmt/apikey", models:[{id:"glm-4",name:"GLM-4"},{id:"glm-4-flash",name:"GLM-4 Flash"}] },
-  qwen:    { label:"通义千问",   keyUrl:"https://dashscope.console.aliyun.com/apiKey",      models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"},{id:"qwen-vl-max",name:"Qwen VL Max 👁"},{id:"qwen-vl-plus",name:"Qwen VL Plus 👁"},{id:"qwen-vl-turbo",name:"Qwen VL Turbo 👁"}] },
+  qwen:    { label:"通义千问",   keyUrl:"https://bailian.console.aliyun.com/",              models:[{id:"qwen-max",name:"Qwen Max"},{id:"qwen-plus",name:"Qwen Plus"},{id:"qwen-turbo",name:"Qwen Turbo"},{id:"qwen-vl-max",name:"Qwen VL Max 👁"},{id:"qwen-vl-plus",name:"Qwen VL Plus 👁"},{id:"qwen-vl-turbo",name:"Qwen VL Turbo 👁"}] },
 };
 
 const LS = "treechat_v1";
@@ -810,8 +820,6 @@ function renderConv(){
     path.map((n,i)=> i===0 ? "<b>根</b>" : trunc(n.user,12))
         .join(" <span style='opacity:.5'>›</span> ");
   document.getElementById("depthInfo").textContent = path.length-1;
-  document.getElementById("branchInfo").textContent =
-    selId===rootId ? "从「根」提问" : "从选中节点拉新分支";
   document.getElementById("delBtn").style.visibility = selId===rootId ? "hidden" : "visible";
   document.getElementById("copyPathBtn").style.visibility = selId===rootId ? "hidden" : "visible";
   toggleSending(activeStreams.has(selId));
@@ -1315,7 +1323,7 @@ async function streamNode(node){
     if(e.name==="AbortError"){
       // 用户主动取消，什么都不做
     }else if(e instanceof TypeError){
-      showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
+      showDialog({title:'无法连接到服务器', msg:'无法连接到服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
     }else{
       node.reply+="\n⚠️ "+e.message;
     }
@@ -1390,7 +1398,7 @@ document.getElementById("copyPathBtn").onclick=(e)=>{
   copyText(pathToMarkdown(), e.currentTarget);
 };
 document.getElementById("resetBtn").onclick=()=>{
-  showDialog({title:'新建对话树', msg:'清空当前整棵对话树？所有内容将丢失。',
+  showDialog({title:'清空对话树', msg:'清空当前整棵对话树？所有内容将丢失。',
     danger:true, onOk:()=>{ freshTree(); cfg.collapsedIds=[]; renderAll(); fit(); }});
 };
 
@@ -1494,7 +1502,7 @@ function renderPdet(){
     </div></div>
     <label style="display:flex;align-items:baseline;gap:8px">API Key
       <span style="font-weight:400;font-size:11px">（留空保持不变）</span>
-      <a href="${p.keyUrl}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;font-weight:400;color:var(--accent);text-decoration:none;opacity:.85" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85">获取 Key ↗</a>
+      <a href="${p.keyUrl}" target="_blank" rel="noopener" style="font-size:11px;font-weight:400;color:var(--accent);text-decoration:none;opacity:.85" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85">获取 Key ↗</a>
     </label>
     <div class="pdet-keyrow">
       <input id="sKeyInput" type="password" placeholder="sk-…">
@@ -1563,23 +1571,54 @@ document.getElementById("exportBtn").onclick=()=>{
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download="treechat-"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".json"; a.click();
 };
-document.getElementById("importBtn").onclick=()=>document.getElementById("fileIn").click();
-document.getElementById("fileIn").onchange=(e)=>{
-  const f=e.target.files[0]; if(!f) return;
+function doImportFile(file){
   const r=new FileReader();
   r.onload=()=>{
-    try{
-      const d=JSON.parse(r.result);
-      if(!d.nodes||!d.nodes[d.rootId]) throw 0;
+    let d;
+    try{ d=JSON.parse(r.result); if(!d.nodes||!d.nodes[d.rootId]) throw 0; }
+    catch(err){ showDialog({title:'导入失败', msg:'文件无法解析或格式不兼容。', cancelLabel:null, okLabel:'好'}); return; }
+    const apply=()=>{
       cfg=Object.assign(cfg,d.cfg||{});
       if(!Array.isArray(cfg.collapsedIds)) cfg.collapsedIds=[];
       if(!cfg.maxLines) cfg.maxLines=3;
       nodes=d.nodes; rootId=d.rootId; selId=d.selId in d.nodes?d.selId:d.rootId;
       renderAll(); fit();
-    }catch(err){ showDialog({title:'导入失败', msg:'文件无法解析或格式不兼容。', cancelLabel:null, okLabel:'好'}); }
+    };
+    const nonEmpty=Object.keys(nodes).length>1||nodes[rootId]?.children?.length>0;
+    if(nonEmpty){
+      showDialog({title:'导入并覆盖', msg:'导入会覆盖当前整棵对话树，且无法撤销。确认继续？',
+        danger:true, onOk:apply});
+    } else { apply(); }
   };
-  r.readAsText(f); e.target.value="";
+  r.readAsText(file);
+}
+document.getElementById("importBtn").onclick=()=>document.getElementById("fileIn").click();
+document.getElementById("fileIn").onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  doImportFile(f); e.target.value="";
 };
+
+// 拖入 JSON 文件导入（含遮罩特效）
+{
+  const overlay=document.getElementById("dropOverlay");
+  let dragDepth=0;
+  const hasFile=e=>[...e.dataTransfer.items].some(i=>i.kind==="file");
+  document.addEventListener("dragenter",(e)=>{
+    if(!hasFile(e)) return;
+    if(++dragDepth===1) overlay.classList.add("active");
+  });
+  document.addEventListener("dragleave",(e)=>{
+    if(--dragDepth<=0){ dragDepth=0; overlay.classList.remove("active"); }
+  });
+  document.addEventListener("dragover",(e)=>{ if(hasFile(e)) e.preventDefault(); });
+  document.addEventListener("drop",(e)=>{
+    dragDepth=0; overlay.classList.remove("active");
+    const f=[...e.dataTransfer.files].find(f=>f.name.endsWith(".json")||f.type==="application/json");
+    if(!f) return;
+    e.preventDefault();
+    doImportFile(f);
+  });
+}
 
 /* =========================================================
    键盘快捷键
@@ -1670,7 +1709,7 @@ document.addEventListener("mousedown",(e)=>{
     if(!keyStatus[cfg.provider]) openSettings();
   }catch(e){
     if(e instanceof TypeError)
-      showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
+      showDialog({title:'无法连接到服务器', msg:'无法连接到服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
   }
 })();
 
