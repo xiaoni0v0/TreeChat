@@ -1158,6 +1158,10 @@
                 display: block
             }
 
+            #side {
+                display: none
+            }
+
             #divider {
                 display: none
             }
@@ -1327,7 +1331,7 @@
 </header>
 
 <main>
-    <div id="treeWrap" style="flex:1.25">
+    <div id="treeWrap" class="m-show" style="flex:1.25">
         <svg id="tree">
             <g id="viewport">
                 <g id="edges"></g>
@@ -1454,7 +1458,7 @@
 
 <!-- 移动端底部导航栏 -->
 <nav id="mobileNav">
-    <button class="mtab" id="tabTree">
+    <button class="mtab active" id="tabTree">
         <svg viewBox="0 0 24 24">
             <circle cx="12" cy="5" r="2"/>
             <circle cx="5" cy="19" r="2"/>
@@ -1464,7 +1468,7 @@
         </svg>
         树图
     </button>
-    <button class="mtab active" id="tabChat">
+    <button class="mtab" id="tabChat">
         <svg viewBox="0 0 24 24">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
@@ -3727,7 +3731,6 @@
 
         function goTree() {
             treeWrapEl.classList.add("m-show");
-            sideEl.style.display = "none";
             tabTree.classList.add("active");
             tabChat.classList.remove("active");
             layout();
@@ -3745,7 +3748,7 @@
 
         function goChat() {
             treeWrapEl.classList.remove("m-show");
-            sideEl.style.display = "";
+            sideEl.style.display = "flex";
             tabChat.classList.add("active");
             tabTree.classList.remove("active");
         }
