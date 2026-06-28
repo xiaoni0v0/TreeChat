@@ -1293,16 +1293,12 @@
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],
                 processEscapes: true,
                 tags: 'none',
-                packages: {'[+]': ['unicode']},
-                // MathJax 4 的 SVG 字体含 U+222F/U+2230 字形，但 TeX 解析器未注册为命令；
-                // 通过 unicode 扩展桥接，可用自有字体渲染，字号字型与 \iint 一致。
-                macros: {
-                    oiint: '\\unicode{x222F}',
-                    oiiint: '\\unicode{x2230}',
-                },
             },
             svg: {fontCache: 'local'},
-            options: {skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']},
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                enableAssistiveMml: false
+            },
             startup: {typeset: false}
         };
     </script>
@@ -1590,10 +1586,98 @@
     let uidc = 0;
     const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
 
+
+    // ---- IndexedDB 附件持久化（绕过 localStorage 5MB 限制）----
+    const IDB_NAME = "treechat", IDB_VER = 2, IDB_STORE = "attachments";
+    let _idb = null;
+
+    async function _idbOpen() {
+        if (_idb) {
+            try {
+                _idb.transaction([IDB_STORE], "readonly");
+                return _idb;
+            } catch (e) {
+                _idb = null;
+            }
+        }
+        return new Promise((resolve, reject) => {
+            const r = indexedDB.open(IDB_NAME, IDB_VER);
+            r.onupgradeneeded = () => {
+                if (r.result.objectStoreNames.contains(IDB_STORE)) r.result.deleteObjectStore(IDB_STORE);
+                r.result.createObjectStore(IDB_STORE, {keyPath: "id"});
+            };
+            r.onsuccess = () => {
+                _idb = r.result;
+                resolve(_idb);
+            };
+            r.onerror = () => reject(r.error);
+        });
+    }
+
+    async function _saveAtts() {
+        if (!Object.values(nodes).some(n => n.attachments && n.attachments.length)) return;
+        try {
+            const db = await _idbOpen();
+            const tx = db.transaction(IDB_STORE, "readwrite");
+            const s = tx.objectStore(IDB_STORE);
+            for (const [id, n] of Object.entries(nodes)) {
+                if (n.attachments && n.attachments.length) s.put({id, atts: n.attachments}); else s.delete(id);
+            }
+            await new Promise(r => {
+                tx.oncomplete = r;
+            });
+        } catch (e) {
+        }
+    }
+
+    async function _loadAtts() {
+        try {
+            const db = await _idbOpen();
+            const tx = db.transaction(IDB_STORE, "readonly");
+            const req = tx.objectStore(IDB_STORE).getAll();
+            await new Promise((resolve, reject) => {
+                req.onsuccess = () => {
+                    for (const row of req.result) {
+                        if (nodes[row.id]) nodes[row.id].attachments = row.atts;
+                    }
+                    resolve();
+                };
+                req.onerror = reject;
+            });
+        } catch (e) {
+        }
+    }
+
+    async function _delAtts(ids) {
+        try {
+            const db = await _idbOpen();
+            const tx = db.transaction(IDB_STORE, "readwrite");
+            const s = tx.objectStore(IDB_STORE);
+            for (const id of ids) s.delete(id);
+            await new Promise(r => {
+                tx.oncomplete = r;
+            });
+        } catch (e) {
+        }
+    }
+
+    async function _clearAtts() {
+        try {
+            const db = await _idbOpen();
+            const tx = db.transaction(IDB_STORE, "readwrite");
+            tx.objectStore(IDB_STORE).clear();
+            await new Promise(r => {
+                tx.oncomplete = r;
+            });
+        } catch (e) {
+        }
+    }
+
     function freshTree() {
         nodes = {};
         rootId = "root";
         nodes[rootId] = {id: rootId, parent: null, user: null, reply: "", reasoning: "", children: [], pending: false};
+        _clearAtts();  // fire-and-forget: 清空 IndexedDB
         selId = rootId;
     }
 
@@ -1608,9 +1692,10 @@
             if (e.name === "QuotaExceededError") console.warn("localStorage quota exceeded, skipping save");
             else throw e;
         }
+        _saveAtts();  // fire-and-forget: IndexedDB
     }
 
-    function load() {
+    async function load() {
         try {
             const d = JSON.parse(localStorage.getItem(LS));
             if (d && d.nodes && d.nodes[d.rootId]) {
@@ -1627,6 +1712,8 @@
                         n.completed = false;
                     }
                 });
+                // 从 IndexedDB 恢复附件
+                await _loadAtts();
                 return true;
             }
         } catch (e) {
@@ -1689,6 +1776,7 @@
         nodes[par].children = nodes[par].children.filter(c => c !== id);
         kill.forEach(k => delete nodes[k]);
         cfg.collapsedIds = (cfg.collapsedIds || []).filter(x => !kill.includes(x));
+        _delAtts(kill);  // fire-and-forget: 清理 IndexedDB 附件
         selId = par;
     }
 
@@ -2896,6 +2984,7 @@
         const node = addChild(selId, text, atts);
         ta.value = "";
         selId = node.id;
+        save();  // 立即存附件到 IndexedDB
         renderAll();
         toggleSending(true);
         await streamNode(node);
@@ -2919,6 +3008,7 @@
             cfg.collapsedIds = cfg.collapsedIds.filter(id => id !== parentId);
         const newNode = addChild(parentId, n.user, n.attachments || []);
         selId = newNode.id;
+        save();  // 立即存附件到 IndexedDB
         renderAll();
         toggleSending(true);
         await streamNode(newNode);
@@ -3366,7 +3456,7 @@
    启动
    ========================================================= */
     (async function init() {
-        if (!load()) {
+        if (!(await load())) {
             freshTree();
         }
         updateThinkBtn();
