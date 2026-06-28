@@ -120,6 +120,16 @@
             background: transparent
         }
 
+        .btn.danger {
+            background: transparent;
+            border-color: var(--danger);
+            color: var(--danger)
+        }
+
+        .btn.danger:hover {
+            background: rgba(248, 81, 73, .12)
+        }
+
         .btn.ghost.active {
             background: rgba(79, 157, 255, .15);
             color: var(--accent);
@@ -1406,6 +1416,7 @@
         </div>
 
         <div class="actions">
+            <button class="btn danger" id="clearAllBtn" style="margin-right:auto">清除一切本地数据</button>
             <button class="btn ghost" onclick="closeModal('settingsMask')">取消</button>
             <button class="btn primary" id="settingsSave">保存</button>
         </div>
@@ -2412,7 +2423,6 @@
             const minW = 180, maxW = window.innerWidth - 340;
             const newW = Math.max(minW, Math.min(maxW, divDrag.w + (e.clientX - divDrag.x)));
             cfg.divRatio = newW / (document.querySelector("main").offsetWidth || window.innerWidth);
-            save();
             treeWrapEl.style.flex = "none";
             treeWrapEl.style.width = newW + "px";
         }
@@ -2426,6 +2436,7 @@
             dividerEl.classList.remove("dragging");
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
+            save();  // 只在拖拽结束时保存一次 divRatio
         }
     });
     svg.addEventListener("wheel", (e) => {
@@ -3282,6 +3293,28 @@
         renderAll();
     };
 
+    document.getElementById("clearAllBtn").onclick = () => {
+        showDialog({
+            title: '清除一切本地数据',
+            msg: '这将永久删除所有 API Key、对话记录、图片附件和设置，且无法撤销。页面将重新加载。\n\n确认继续？',
+            danger: true,
+            onOk: () => showDialog({
+                title: '真的要清除吗？',
+                msg: '此操作不可撤销，所有数据将永久消失。',
+                okLabel: '清除',
+                danger: true,
+                onOk: async () => {
+                    activeStreams.forEach(ac => ac.abort());
+                    activeStreams.clear();
+                    localStorage.removeItem(LS);
+                    localStorage.removeItem(LS_KEYS);
+                    await _clearAtts();
+                    location.reload();
+                }
+            })
+        });
+    };
+
     function setKeyPill() {
         const p = document.getElementById("keyPill"), t = document.getElementById("keyTxt");
         const has = !!keyStatus[cfg.provider];
@@ -3310,6 +3343,7 @@
                 return;
             }
             const apply = () => {
+                _clearAtts();  // 清除旧树的 IDB 条目，避免孤儿记录
                 cfg = Object.assign(cfg, d.cfg || {});
                 if (!Array.isArray(cfg.collapsedIds)) cfg.collapsedIds = [];
                 if (!cfg.maxLines) cfg.maxLines = 3;
