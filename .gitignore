@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.spec
+
+.idea/
+build/
+dist/
+icon.ico
+
+# Download-artifact dirs from GitHub Actions
+TreeChat-linux/
+TreeChat-windows.exe/
