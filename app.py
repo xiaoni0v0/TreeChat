@@ -26,13 +26,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 PROVIDERS = {
     "deepseek": "https://api.deepseek.com/chat/completions",
-    "openai":   "https://api.openai.com/v1/chat/completions",
-    "groq":     "https://api.groq.com/openai/v1/chat/completions",
-    "xai":      "https://api.x.ai/v1/chat/completions",
-    "mistral":  "https://api.mistral.ai/v1/chat/completions",
-    "kimi":     "https://api.moonshot.cn/v1/chat/completions",
-    "zhipu":    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "openai": "https://api.openai.com/v1/chat/completions",
+    "groq": "https://api.groq.com/openai/v1/chat/completions",
+    "xai": "https://api.x.ai/v1/chat/completions",
+    "mistral": "https://api.mistral.ai/v1/chat/completions",
+    "kimi": "https://api.moonshot.cn/v1/chat/completions",
+    "zhipu": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
 }
 # 服务端持有的状态（内存，不写盘，不读环境变量）。key 由前端从 localStorage 恢复后 POST 过来。
 STATE = {"keys": {p: "" for p in PROVIDERS}}
@@ -96,7 +96,9 @@ class Handler(BaseHTTPRequestHandler):
         ctype = {
             ".js": "application/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8",
-            ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
+            ".woff2": "font/woff2",
+            ".woff": "font/woff",
+            ".ttf": "font/ttf",
             ".json": "application/json; charset=utf-8",
         }.get(ext, "application/octet-stream")
         with open(full, "rb") as f:
@@ -122,7 +124,9 @@ class Handler(BaseHTTPRequestHandler):
             key = (data.get("key") or "").strip()
             if provider in STATE["keys"]:
                 STATE["keys"][provider] = key
-            return self._send(200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}})
+            return self._send(
+                200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}}
+            )
 
         if self.path == "/api/test-key":
             return self._test_key()
@@ -145,16 +149,21 @@ class Handler(BaseHTTPRequestHandler):
         if not api_key:
             return self._send(400, {"error": "Key 未设置"})
         model = (data.get("model") or "").strip()
-        payload = json.dumps({
-            "model": model,
-            "messages": [{"role": "user", "content": "hi"}],
-            "stream": False,
-            "max_tokens": 1,
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": False,
+                "max_tokens": 1,
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(
-            PROVIDERS[provider], data=payload,
-            headers={"Content-Type": "application/json",
-                     "Authorization": "Bearer " + api_key},
+            PROVIDERS[provider],
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + api_key,
+            },
             method="POST",
         )
         try:
@@ -183,7 +192,9 @@ class Handler(BaseHTTPRequestHandler):
         # key 优先来自请求体（每用户独立），没有则降级到服务端环境变量
         api_key = (data.get("key") or STATE["keys"].get(provider, "")).strip()
         if not api_key:
-            return self._send(401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider})
+            return self._send(
+                401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider}
+            )
 
         # 透传前端 payload，去掉仅供路由用的字段
         payload = {k: v for k, v in data.items() if k not in ("provider", "key")}
@@ -224,8 +235,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Accel-Buffering", "no")   # 禁止 nginx 缓冲 SSE
-        self.send_header("Connection", "close")        # 流结束后立即关闭连接
+        self.send_header("X-Accel-Buffering", "no")  # 禁止 nginx 缓冲 SSE
+        self.send_header("Connection", "close")  # 流结束后立即关闭连接
         self.end_headers()
         try:
             while True:
@@ -264,12 +275,17 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="TreeChat local server")
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000,
-                        help="bind port (default: 8000)")
-    parser.add_argument("--server", action="store_true",
-                        help="shortcut for --host 0.0.0.0 (multi-user server mode)")
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="bind host (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="bind port (default: 8000)"
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="shortcut for --host 0.0.0.0 (multi-user server mode)",
+    )
     args = parser.parse_args()
 
     host = "0.0.0.0" if args.server else args.host
