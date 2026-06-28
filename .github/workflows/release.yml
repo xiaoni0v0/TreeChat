@@ -23,9 +23,11 @@ jobs:
           - os: ubuntu-latest
             artifact-name: TreeChat-linux
             binary-path: dist/TreeChat
+            release-name: TreeChat-linux
           - os: windows-latest
             artifact-name: TreeChat-windows.exe
             binary-path: dist/TreeChat.exe
+            release-name: TreeChat-windows.exe
 
     steps:
       - name: Checkout
@@ -44,16 +46,19 @@ jobs:
         run: |
           chmod +x build.sh
           bash build.sh
+          mv dist/TreeChat dist/${{ matrix.release-name }}
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        run: .\build.bat
+        run: |
+          .\build.bat
+          ren dist\TreeChat.exe ${{ matrix.release-name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.binary-path }}
+          path: dist/${{ matrix.release-name }}
           if-no-files-found: error
 
   release:
@@ -75,5 +80,5 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            TreeChat-linux/TreeChat
-            TreeChat-windows.exe/TreeChat.exe
+            TreeChat-linux/TreeChat-linux
+            TreeChat-windows.exe/TreeChat-windows.exe
