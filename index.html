@@ -2023,7 +2023,7 @@
                     insertIdx: par.children.indexOf(id),
                     startClientX: e.clientX, startClientY: e.clientY,
                     origPx: nodes[id].px, origPy: nodes[id].py,
-                    dragging: false, svgEl: null, savedPositions: null
+                    dragging: false, svgEl: null, savedPositions: null, animFrame: null
                 };
             });
             g.addEventListener("click", (e) => {
@@ -2472,7 +2472,7 @@
                             insertIdx: nodes[_nn.parent].children.indexOf(nid),
                             startClientX: cx, startClientY: cy,
                             origPx: _nn.px, origPy: _nn.py,
-                            dragging: false, svgEl: null, savedPositions: null
+                            dragging: false, svgEl: null, savedPositions: null, animFrame: null
                         };
                     }
                     lpTimer = setTimeout(() => {
@@ -2578,36 +2578,67 @@
     function _dragActivate() {
         dragHappened = true;
         nodeDrag.dragging = true;
-        const dragEl = gNodes.querySelector(`[data-id="${nodeDrag.id}"]`);
-        if (!dragEl) {
-            nodeDrag = null;
-            return;
-        }
-        // 保存拖前所有节点的 px/py
+
         nodeDrag.savedPositions = {};
         for (const id in nodes) nodeDrag.savedPositions[id] = {px: nodes[id].px, py: nodes[id].py};
-        // 将拖拽节点移到 gNodes 末尾，使其在 SVG 中渲染于最顶层
-        gNodes.removeChild(dragEl);
-        gNodes.appendChild(dragEl);
-        dragEl.classList.add("drag-ghost");
-        nodeDrag.svgEl = dragEl;
-        // 给所有其他可见节点加过渡动画
-        getVisibleSet().forEach(vid => {
-            if (vid === nodeDrag.id) return;
-            const vel = gNodes.querySelector(`[data-id="${vid}"]`);
-            if (vel) vel.style.transition = "transform .18s cubic-bezier(.25,.46,.45,.94)";
+
+        // 收集子树（拖拽节点 + 所有后代）
+        const subtreeIds = new Set([nodeDrag.id, ...descendants(nodeDrag.id)]);
+        nodeDrag.subtreeIds = subtreeIds;
+
+        // 将子树中所有可见节点移到 gNodes 末尾（SVG 顶层）并标记 drag-ghost
+        const subtreeEls = [];
+        subtreeIds.forEach(sid => {
+            const sel = gNodes.querySelector(`[data-id="${sid}"]`);
+            if (!sel) return;
+            gNodes.removeChild(sel);
+            gNodes.appendChild(sel);
+            sel.classList.add("drag-ghost");
+            subtreeEls.push({id: sid, el: sel});
         });
+        nodeDrag.subtreeEls = subtreeEls;
+        nodeDrag.svgEl = gNodes.querySelector(`[data-id="${nodeDrag.id}"]`);
+
+        const vis = getVisibleSet();
+
+        // 清掉子树入/出边，其余静态边保留
+        _dragRebuildEdges(vis);
+
+        // 创建父→B 活动连线，全程跟随 B 的实时位置
+        const dragEdge = el("path", {class: "edge drag-edge"});
+        gEdges.appendChild(dragEdge);
+        nodeDrag.dragEdgeEl = dragEdge;
     }
 
     function _dragUpdate(clientX, clientY) {
         if (!nodeDrag || !nodeDrag.dragging) return;
         const dx = (clientX - nodeDrag.startClientX) / view.s;
         const dy = (clientY - nodeDrag.startClientY) / view.s;
+        const sdy = dy * 0.1;
         const nw = getNW();
-        // 拖拽节点跟随鼠标（水平自由，垂直轻微跟随以给予拖拽感）
-        nodeDrag.svgEl.style.transition = "none";
-        nodeDrag.svgEl.style.transform = `translate(${nodeDrag.origPx + dx}px,${nodeDrag.origPy + dy * 0.1}px)`;
-        // 根据拖拽中心 x 计算插入位置
+        nodeDrag.currentDx = dx;
+        nodeDrag.currentSdy = sdy;
+
+        // 整棵子树跟随鼠标（用 setAttribute 写 SVG transform，避免与 CSS style.transform 叠加偏移）
+        nodeDrag.subtreeEls.forEach(({id, el}) => {
+            const orig = nodeDrag.savedPositions[id];
+            el.setAttribute("transform", `translate(${orig.px + dx},${orig.py + sdy})`);
+        });
+
+        // 每帧更新子树内部边
+        _redrawSubtreeEdges(dx, sdy);
+
+        // 每帧更新父→B 活动连线
+        if (nodeDrag.dragEdgeEl) {
+            const par = nodeDrag.savedPositions[nodeDrag.parentId];
+            const ph = nodes[nodeDrag.parentId].h;
+            const x1 = par.px + nw / 2, y1 = par.py + ph + 10;
+            const x2 = nodeDrag.origPx + dx + nw / 2, y2 = nodeDrag.origPy + sdy;
+            const my = (y1 + y2) / 2;
+            nodeDrag.dragEdgeEl.setAttribute("d", `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
+        }
+
+        // 根据拖拽根节点中心 x 计算插入位置
         const sibs = nodeDrag.origOrder.filter(id => id !== nodeDrag.id);
         const cxDrag = nodeDrag.origPx + dx + nw / 2;
         let newIdx = sibs.length;
@@ -2617,21 +2648,67 @@
                 break;
             }
         }
-        if (newIdx === nodeDrag.insertIdx) return; // 插入位置未变，跳过重算
+        if (newIdx === nodeDrag.insertIdx) return;
         nodeDrag.insertIdx = newIdx;
-        // 临时顺序 → 重算布局 → 动画兄弟节点
+
+        // 临时顺序 → 重算布局 → 获取目标坐标
         const tempOrder = [...sibs];
         tempOrder.splice(newIdx, 0, nodeDrag.id);
         const parent = nodes[nodeDrag.parentId];
         parent.children = tempOrder;
         layout();
         const visible = getVisibleSet();
+
+        // 收集非子树节点：从 DOM 读取当前视觉位置（可能在上一次动画中途），以及新布局目标位置
+        const velData = {};
         visible.forEach(vid => {
-            if (vid === nodeDrag.id) return;
+            if (nodeDrag.subtreeIds.has(vid)) return;
             const vel = gNodes.querySelector(`[data-id="${vid}"]`);
-            if (vel) vel.style.transform = `translate(${nodes[vid].px}px,${nodes[vid].py}px)`;
+            if (!vel) return;
+            const m = (vel.getAttribute("transform") || "").match(/translate\(([^,]+),([^)]+)\)/);
+            velData[vid] = {
+                el: vel,
+                sx: m ? parseFloat(m[1]) : nodes[vid].px,
+                sy: m ? parseFloat(m[2]) : nodes[vid].py,
+                ex: nodes[vid].px,
+                ey: nodes[vid].py
+            };
         });
-        _dragRebuildEdges(visible);
+        const animVis = new Set([...visible]);
+
+        // 取消上一次动画，启动新的 rAF 同步动画（节点 + 边逐帧同步缓动）
+        if (nodeDrag.animFrame) cancelAnimationFrame(nodeDrag.animFrame);
+        const _t0 = performance.now();
+
+        function _animStep(now) {
+            if (!nodeDrag?.dragging) return;
+            const t = Math.min(1, (now - _t0) / 180);
+            const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+            const curPos = {};
+            for (const vid in velData) {
+                const {el, sx, sy, ex, ey} = velData[vid];
+                const px = sx + (ex - sx) * ease, py = sy + (ey - sy) * ease;
+                curPos[vid] = {px, py};
+                el.setAttribute("transform", `translate(${px},${py})`);
+            }
+            _redrawStaticEdges(animVis, curPos);
+            // 同步更新父→B 边的上端点（父节点随子树重排而移动时跟着缓动）
+            if (nodeDrag.dragEdgeEl) {
+                const nw2 = getNW();
+                const parPos = curPos[nodeDrag.parentId] || nodeDrag.savedPositions[nodeDrag.parentId];
+                const ph = nodes[nodeDrag.parentId].h;
+                const x1 = parPos.px + nw2 / 2, y1 = parPos.py + ph + 10;
+                const x2 = nodeDrag.origPx + (nodeDrag.currentDx ?? 0) + nw2 / 2;
+                const y2 = nodeDrag.origPy + (nodeDrag.currentSdy ?? 0);
+                const my = (y1 + y2) / 2;
+                nodeDrag.dragEdgeEl.setAttribute("d", `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
+            }
+            if (t < 1) nodeDrag.animFrame = requestAnimationFrame(_animStep);
+            else nodeDrag.animFrame = null;
+        }
+
+        nodeDrag.animFrame = requestAnimationFrame(_animStep);
+
         // 还原原始顺序和坐标（拖拽结束前不提交）
         parent.children = nodeDrag.origOrder;
         for (const id in nodes) {
@@ -2642,15 +2719,71 @@
         }
     }
 
+    // 仅重绘静态边（非子树、非活动连线），在每帧 rAF 中与节点同步调用
+    function _redrawStaticEdges(visible, curPos) {
+        [...gEdges.children].filter(e =>
+            !e.classList.contains("subtree-edge") && !e.classList.contains("drag-edge")
+        ).forEach(e => e.remove());
+        const onPath = new Set(pathTo(selId).map(n => n.id));
+        const nw = getNW();
+        const subtreeIds = nodeDrag.subtreeIds;
+        for (const id in nodes) {
+            if (!visible.has(id) || subtreeIds.has(id)) continue;
+            const n = nodes[id];
+            const px_n = curPos[id]?.px ?? n.px;
+            const py_n = curPos[id]?.py ?? n.py;
+            n.children.forEach(cid => {
+                if (!visible.has(cid) || subtreeIds.has(cid)) return;
+                const c = nodes[cid];
+                const px_c = curPos[cid]?.px ?? c.px;
+                const py_c = curPos[cid]?.py ?? c.py;
+                const x1 = px_n + nw / 2, y1 = py_n + n.h + 10;
+                const x2 = px_c + nw / 2, y2 = py_c;
+                const my = (y1 + y2) / 2;
+                gEdges.appendChild(el("path", {
+                    d: `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`,
+                    class: onPath.has(id) && onPath.has(cid) ? "edge onpath" : "edge"
+                }));
+            });
+        }
+    }
+
+    function _redrawSubtreeEdges(sdx, sdy) {
+        [...gEdges.querySelectorAll(".subtree-edge")].forEach(e => e.remove());
+        if (!nodeDrag?.subtreeEls?.length) return;
+        const onPath = new Set(pathTo(selId).map(n => n.id));
+        const saved = nodeDrag.savedPositions;
+        const visSet = new Set(nodeDrag.subtreeEls.map(({id}) => id));
+        const nw = getNW();
+        for (const {id} of nodeDrag.subtreeEls) {
+            const n = nodes[id];
+            if (!n) continue;
+            const x1 = saved[id].px + sdx + nw / 2;
+            const y1 = saved[id].py + sdy + n.h + 10;
+            n.children.forEach(cid => {
+                if (!visSet.has(cid) || !nodes[cid]) return;
+                const x2 = saved[cid].px + sdx + nw / 2;
+                const y2 = saved[cid].py + sdy;
+                const my = (y1 + y2) / 2;
+                gEdges.appendChild(el("path", {
+                    d: `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`,
+                    class: (onPath.has(id) && onPath.has(cid) ? "edge onpath" : "edge") + " subtree-edge"
+                }));
+            });
+        }
+    }
+
+    // 拖拽开始时调用一次：清掉子树入/出边，画静态边 + 子树内部边（偏移=0）
     function _dragRebuildEdges(visible) {
         gEdges.innerHTML = "";
         const onPath = new Set(pathTo(selId).map(n => n.id));
+        const nw = getNW();
+        const subtreeIds = nodeDrag.subtreeIds;
         for (const id in nodes) {
-            if (!visible.has(id) || id === nodeDrag.id) continue; // 跳过拖拽节点的出边
+            if (!visible.has(id) || subtreeIds.has(id)) continue;
             const n = nodes[id];
-            const nw = getNW();
             n.children.forEach(cid => {
-                if (!visible.has(cid) || cid === nodeDrag.id) return; // 跳过到拖拽节点的入边
+                if (!visible.has(cid) || subtreeIds.has(cid)) return;
                 const c = nodes[cid];
                 const x1 = n.px + nw / 2, y1 = n.py + n.h + 10;
                 const x2 = c.px + nw / 2, y2 = c.py;
@@ -2661,10 +2794,16 @@
                 }));
             });
         }
+        _redrawSubtreeEdges(0, 0);
+        // dragEdgeEl 在此之后才创建，无需挂回
     }
 
     function _dragFinish() {
         if (!nodeDrag) return;
+        if (nodeDrag.animFrame) {
+            cancelAnimationFrame(nodeDrag.animFrame);
+            nodeDrag.animFrame = null;
+        }
         const wasDragging = nodeDrag.dragging;
         if (wasDragging) {
             // 提交新顺序
