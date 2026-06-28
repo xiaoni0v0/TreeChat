@@ -2182,7 +2182,8 @@
     function typeset(elm) {
         if (window.MathJax && MathJax.typesetPromise) {
             try {
-                MathJax.typesetClear && MathJax.typesetClear([elm]);
+                // 全量清除：流式期间 tex2svg→clearPromises() 会让上一次 typesetPromise 留下孤立 math item，不传参才能彻底清掉
+                MathJax.typesetClear && MathJax.typesetClear();
             } catch (e) {
             }
             MathJax.typesetPromise([elm]).catch(() => {
