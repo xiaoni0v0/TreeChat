@@ -1555,6 +1555,10 @@
         return (d.getMonth() + 1) + "/" + (d.getDate()) + " " + hh + ":" + mm;
     }
 
+    // ====== 存储架构 ======
+    // localStorage["treechat_v1"]      — 对话树 + 所有配置 (cfg + nodes, 不含附件)
+    // localStorage["treechat_keys_v1"] — API Key（独立隔离，方便清空会话时保留 Key）
+    // IndexedDB["treechat"].attachments — 附件 base64（绕过 localStorage 5MB 限制）
     const LS = "treechat_v1";
     const LS_KEYS = "treechat_keys_v1"; // 存实际 key 值（仅本地）
     // 支持可切换思考模式的模型 → [开启时的字段, 关闭时的字段]
@@ -1571,7 +1575,8 @@
         maxChars: 20,
         maxLines: 3,
         collapsedIds: [],
-        thinking: false
+        thinking: false,
+        divRatio: 0.55,
     };
     let keyStatus = {};   // { provider: bool } — 仅用于 UI 状态，从 realKeys 派生
     let realKeys = {};   // { provider: key_string } — 实际 key，仅存前端 localStorage
@@ -2371,7 +2376,7 @@
     /* =========================================================
    平移 / 缩放
    ========================================================= */
-    let pan = null, divDrag = null, divRatio = +(localStorage.getItem("divRatio") || 0.55);
+    let pan = null, divDrag = null;
     const treeWrapEl = document.getElementById("treeWrap");
     const dividerEl = document.getElementById("divider");
 
@@ -2406,8 +2411,8 @@
         if (divDrag) {
             const minW = 180, maxW = window.innerWidth - 340;
             const newW = Math.max(minW, Math.min(maxW, divDrag.w + (e.clientX - divDrag.x)));
-            divRatio = newW / (document.querySelector("main").offsetWidth || window.innerWidth);
-            localStorage.setItem("divRatio", divRatio);
+            cfg.divRatio = newW / (document.querySelector("main").offsetWidth || window.innerWidth);
+            save();
             treeWrapEl.style.flex = "none";
             treeWrapEl.style.width = newW + "px";
         }
@@ -3467,6 +3472,15 @@
             // key 只存前端，无需恢复到服务器
             realKeys = JSON.parse(localStorage.getItem(LS_KEYS) || "{}");
             syncKeyStatus();
+            // 向后兼容：旧版 divRatio 裸 key 迁移到 cfg
+            const _oldDiv = localStorage.getItem("divRatio");
+            if (_oldDiv) {
+                if (cfg.divRatio === 0.55) {
+                    cfg.divRatio = +_oldDiv;
+                    save();
+                }
+                localStorage.removeItem("divRatio");
+            }
             await fetch("/api/status"); // 仅用于检测服务器是否在线
             setKeyPill();
             if (!keyStatus[cfg.provider]) openSettings();
@@ -3484,9 +3498,9 @@
     /* =========================================================
    页面加载时恢复保存的分割条比例（仅桌面端、且用户曾自定义过）
    ========================================================= */
-    if (localStorage.getItem("divRatio") && window.innerWidth > 768) {
+    if (cfg.divRatio != null && window.innerWidth > 768) {
         const mainW = document.querySelector("main").offsetWidth;
-        const newW = Math.round(Math.max(180, Math.min(mainW - 340, divRatio * mainW)));
+        const newW = Math.round(Math.max(180, Math.min(mainW - 340, cfg.divRatio * mainW)));
         treeWrapEl.style.flex = "none";
         treeWrapEl.style.width = newW + "px";
     }
@@ -3504,7 +3518,7 @@
                 treeWrapEl.classList.remove("m-show");
                 // 按保存的比例恢复分割条
                 const mainW = document.querySelector("main").offsetWidth;
-                const newW = Math.round(Math.max(180, Math.min(mainW - 340, divRatio * mainW)));
+                const newW = Math.round(Math.max(180, Math.min(mainW - 340, cfg.divRatio * mainW)));
                 treeWrapEl.style.flex = "none";
                 treeWrapEl.style.width = newW + "px";
             }
