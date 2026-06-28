@@ -1702,7 +1702,13 @@
         for (const [id, n] of Object.entries(nodes))
             lean[id] = {...n, attachments: []};
         try {
-            localStorage.setItem(LS, JSON.stringify({cfg, rootId, selId, nodes: lean}));
+            localStorage.setItem(LS, JSON.stringify({
+                cfg,
+                rootId,
+                selId,
+                nodes: lean,
+                view: {tx: view.tx, ty: view.ty, s: view.s}
+            }));
         } catch (e) {
             if (e.name === "QuotaExceededError") console.warn("localStorage quota exceeded, skipping save");
             else throw e;
@@ -1720,6 +1726,7 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
+                if (d.view) Object.assign(view, d.view);
                 // 修复意外中断：上次关闭时正在生成的节点，标为"未完成"而非永久等待
                 Object.values(nodes).forEach(n => {
                     if (n.pending) {
@@ -1930,6 +1937,8 @@
 
     function applyView() {
         vp.setAttribute("transform", `translate(${view.tx},${view.ty}) scale(${view.s})`);
+        clearTimeout(_viewSaveTimer);
+        _viewSaveTimer = setTimeout(() => save(), 500);
     }
 
     function trunc(s, n) {
@@ -2386,7 +2395,7 @@
     /* =========================================================
    平移 / 缩放
    ========================================================= */
-    let pan = null, divDrag = null;
+    let pan = null, divDrag = null, _viewSaveTimer = null;
     const treeWrapEl = document.getElementById("treeWrap");
     const dividerEl = document.getElementById("divider");
 
@@ -2426,6 +2435,7 @@
             treeWrapEl.style.width = newW + "px";
         }
     });
+    window.addEventListener("beforeunload", () => save());
     window.addEventListener("mouseup", () => {
         _dragFinish();
         pan = null;
@@ -3488,6 +3498,7 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
+                if (d.view) Object.assign(view, d.view);
                 renderAll();
                 fit();
             };
@@ -3638,7 +3649,15 @@
         }
         updateThinkBtn();
         renderAll();
-        fit();
+        // 有保存的摄像机位置时覆盖 fit() 默认结果
+        try {
+            const _sv = JSON.parse(localStorage.getItem(LS));
+            if (_sv && _sv.view) {
+                Object.assign(view, _sv.view);
+                applyView();
+            }
+        } catch (e) {
+        }
         whenMathJax(() => typeset(document.getElementById("conv")));
         try {
             // key 只存前端，无需恢复到服务器
@@ -3713,6 +3732,15 @@
             tabChat.classList.remove("active");
             layout();
             fit();
+            // 恢复保存的摄像机位置（覆盖 fit 默认）
+            try {
+                const _sv = JSON.parse(localStorage.getItem(LS));
+                if (_sv && _sv.view) {
+                    Object.assign(view, _sv.view);
+                    applyView();
+                }
+            } catch (e) {
+            }
         }
 
         function goChat() {
