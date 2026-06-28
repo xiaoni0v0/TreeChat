@@ -234,6 +234,94 @@
   #dialogMask .modal{width:360px}
   #dialogTitle{margin:0 0 10px;font-size:16px}
   #dialogMsg{margin:0 0 22px;color:var(--muted);font-size:14px;line-height:1.6}
+
+  /* ================================================================
+     移动端适配 (≤768px)
+     ================================================================ */
+  #mobileNav{display:none}
+
+  @media(max-width:768px){
+    /* 顶栏：压缩间距让所有按钮都能显示 */
+    header{gap:3px;padding:0 8px}
+    header .btn.ghost{padding:5px 8px;font-size:12px}
+    header .logo{font-size:15px}
+    #keyPill{font-size:11px;padding:3px 8px}
+
+    /* 主区域：两个面板叠放，按 tab 切换 */
+    main{
+      height:calc(100% - 52px - 48px);
+      position:relative;
+      overflow:hidden;
+    }
+    #treeWrap,#side{
+      position:absolute!important;inset:0;
+      width:100%!important;flex:none!important;
+    }
+    #treeWrap{display:none}
+    #treeWrap.m-show{display:block}
+    #divider{display:none}
+
+    /* 对话区 */
+    #conv{padding:10px 12px 6px}
+    .msg.user .bubble{max-width:94%}
+    .msg.ai .bubble{max-width:100%}
+    .bubble{font-size:14px}
+
+    /* 输入区 */
+    .composer{padding:8px 10px}
+    .composer textarea{height:52px}
+    .composer .row{gap:4px}
+    #branchInfo{
+      overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+      max-width:44vw;font-size:11px;
+    }
+    #copyPathBtn{display:none}
+    .send-row{gap:6px;flex-wrap:wrap}
+
+    /* 触摸目标最小 38px */
+    .btn{min-height:38px}
+
+    /* 设置弹窗：底部抽屉，z-index 需高于底部导航栏 (100) */
+    .mask{align-items:flex-end;z-index:110}
+    #dialogMask{align-items:center} /* 通用对话框覆盖为居中 */
+    #settingsMask .modal{
+      width:100%;max-width:100%;max-height:88vh;
+      border-radius:14px 14px 0 0;
+      border-left:none;border-right:none;border-bottom:none;
+    }
+    .pgrid{grid-template-columns:repeat(3,1fr)}
+
+    /* 通用对话框：居中小卡片 */
+    #dialogMask{align-items:center}
+    #dialogMask .modal{width:92%;border-radius:14px}
+
+    /* 右键菜单触摸优化 */
+    .ctx-item{padding:10px 14px}
+
+    /* 提示文字（桌面专属） */
+    .hint{display:none}
+
+    /* ---- 底部导航栏 ---- */
+    #mobileNav{
+      display:flex;position:fixed;
+      bottom:0;left:0;right:0;height:48px;
+      background:var(--panel);border-top:1px solid var(--line);
+      z-index:100;
+    }
+    .mtab{
+      flex:1;background:none;border:none;
+      color:var(--muted);font-size:12px;font-family:inherit;
+      cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:5px;
+      transition:color .15s,background .15s;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .mtab.active{color:var(--accent);background:rgba(79,157,255,.08)}
+    .mtab svg{
+      width:16px;height:16px;stroke:currentColor;fill:none;
+      stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0
+    }
+  }
 </style>
 
 <script>
@@ -384,6 +472,18 @@ window.MathJax = {
 </div>
 
 <input type="file" id="fileIn" accept="application/json" style="display:none">
+
+<!-- 移动端底部导航栏 -->
+<nav id="mobileNav">
+  <button class="mtab" id="tabTree">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="8" y2="17"/><line x1="12" y1="7" x2="16" y2="17"/></svg>
+    树图
+  </button>
+  <button class="mtab active" id="tabChat">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    对话
+  </button>
+</nav>
 
 <script>
 "use strict";
@@ -893,12 +993,19 @@ function typesetDebounced(elm, delay=450){
 }
 
 function renderAll(){ renderTree(); renderConv(); save(); }
-function select(id){ selId = id; renderAll(); }
+function select(id){
+  selId = id; renderAll();
+  // 移动端：选中节点后自动切到对话视图
+  if(window.innerWidth<=768){
+    const tc=document.getElementById("tabChat");
+    if(tc&&!tc.classList.contains("active")) tc.click();
+  }
+}
 
 /* =========================================================
    平移 / 缩放
    ========================================================= */
-let pan=null, divDrag=null;
+let pan=null, divDrag=null, divRatio=+(localStorage.getItem("divRatio")||0.55);
 const treeWrapEl=document.getElementById("treeWrap");
 const dividerEl=document.getElementById("divider");
 
@@ -920,6 +1027,8 @@ window.addEventListener("mousemove",(e)=>{
   if(divDrag){
     const minW=180, maxW=window.innerWidth-340;
     const newW=Math.max(minW,Math.min(maxW,divDrag.w+(e.clientX-divDrag.x)));
+    divRatio=newW/(document.querySelector("main").offsetWidth||window.innerWidth);
+    localStorage.setItem("divRatio",divRatio);
     treeWrapEl.style.flex="none";
     treeWrapEl.style.width=newW+"px";
   }
@@ -940,6 +1049,77 @@ svg.addEventListener("wheel",(e)=>{
   view.ty=my-(my-view.ty)*(ns/view.s);
   view.s=ns; applyView();
 },{passive:false});
+
+// 触摸手势：单指平移，双指缩放，长按弹菜单（移动端）
+{
+  let tPan=null, tPinch=null, lpTimer=null;
+  const tDist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+
+  svg.addEventListener("touchstart",(e)=>{
+    clearTimeout(lpTimer); lpTimer=null;
+    const nodeEl=e.target.closest(".node");
+    if(e.touches.length===1){
+      if(nodeEl){
+        // 长按 600ms 弹出右键菜单（代替桌面右键）
+        const cx=e.touches[0].clientX, cy=e.touches[0].clientY;
+        const nid=nodeEl.dataset.id;
+        lpTimer=setTimeout(()=>{
+          navigator.vibrate&&navigator.vibrate(40);
+          select(nid);
+          showCtxMenu({clientX:cx,clientY:cy,preventDefault:()=>{}},nid);
+          lpTimer=null;
+        },600);
+      } else if(!e.target.closest(".tog-bg")){
+        e.preventDefault();
+        tPan={x:e.touches[0].clientX,y:e.touches[0].clientY,tx:view.tx,ty:view.ty};
+        tPinch=null;
+      }
+    } else if(e.touches.length>=2){
+      e.preventDefault();
+      tPan=null;
+      const d=tDist(e.touches);
+      const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+      const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+      tPinch={d,s:view.s,tx:view.tx,ty:view.ty,cx,cy};
+    }
+  },{passive:false});
+
+  svg.addEventListener("touchmove",(e)=>{
+    if(e.touches.length>1){clearTimeout(lpTimer);lpTimer=null;}
+    if(e.touches.length===1&&tPan){
+      const dx=Math.abs(e.touches[0].clientX-tPan.x)+Math.abs(e.touches[0].clientY-tPan.y);
+      if(dx>5){clearTimeout(lpTimer);lpTimer=null;}
+      e.preventDefault();
+      view.tx=tPan.tx+(e.touches[0].clientX-tPan.x);
+      view.ty=tPan.ty+(e.touches[0].clientY-tPan.y);
+      applyView();
+    } else if(e.touches.length>=2&&tPinch){
+      e.preventDefault();
+      const d=tDist(e.touches);
+      const ns=Math.min(2.2,Math.max(0.3,tPinch.s*(d/tPinch.d)));
+      const r=svg.getBoundingClientRect();
+      const cx=tPinch.cx-r.left, cy=tPinch.cy-r.top;
+      view.tx=cx-(cx-tPinch.tx)*(ns/tPinch.s);
+      view.ty=cy-(cy-tPinch.ty)*(ns/tPinch.s);
+      view.s=ns; applyView();
+    }
+  },{passive:false});
+
+  svg.addEventListener("touchend",(e)=>{
+    clearTimeout(lpTimer); lpTimer=null;
+    if(e.touches.length===0){tPan=null;tPinch=null;}
+    else if(e.touches.length===1){tPinch=null;}
+  },{passive:true});
+
+  svg.addEventListener("touchcancel",()=>{
+    clearTimeout(lpTimer);lpTimer=null;tPan=null;tPinch=null;
+  },{passive:true});
+
+  // 触摸点击菜单外部时关闭
+  document.addEventListener("touchstart",(e)=>{
+    if(ctxMenu.style.display==="block"&&!ctxMenu.contains(e.target)) hideCtxMenu();
+  },{passive:true});
+}
 
 function fit(){
   const visible = getVisibleSet();
@@ -1493,6 +1673,61 @@ document.addEventListener("mousedown",(e)=>{
       showDialog({title:'无法连接到服务器', msg:'无法连接到本地服务器，请确认 app.py 正在运行（运行后刷新页面）。', cancelLabel:null, okLabel:'好'});
   }
 })();
+
+/* =========================================================
+   页面加载时恢复保存的分割条比例（仅桌面端、且用户曾自定义过）
+   ========================================================= */
+if(localStorage.getItem("divRatio") && window.innerWidth>768){
+  const mainW=document.querySelector("main").offsetWidth;
+  const newW=Math.round(Math.max(180,Math.min(mainW-340,divRatio*mainW)));
+  treeWrapEl.style.flex="none";
+  treeWrapEl.style.width=newW+"px";
+}
+
+/* =========================================================
+   窗口 resize：从移动端切回桌面时恢复布局
+   ========================================================= */
+{
+  let wasMobile=(window.innerWidth<=768);
+  window.addEventListener("resize",()=>{
+    const isMobile=window.innerWidth<=768;
+    if(wasMobile&&!isMobile){
+      const sEl=document.getElementById("side");
+      sEl.style.display="";
+      treeWrapEl.classList.remove("m-show");
+      // 按保存的比例恢复分割条
+      const mainW=document.querySelector("main").offsetWidth;
+      const newW=Math.round(Math.max(180,Math.min(mainW-340,divRatio*mainW)));
+      treeWrapEl.style.flex="none";
+      treeWrapEl.style.width=newW+"px";
+    }
+    wasMobile=isMobile;
+  });
+}
+
+/* =========================================================
+   移动端底部标签切换
+   ========================================================= */
+{
+  const tabTree=document.getElementById("tabTree");
+  const tabChat=document.getElementById("tabChat");
+  const sideEl =document.getElementById("side");
+
+  function goTree(){
+    treeWrapEl.classList.add("m-show");
+    sideEl.style.display="none";
+    tabTree.classList.add("active"); tabChat.classList.remove("active");
+    layout(); fit();
+  }
+  function goChat(){
+    treeWrapEl.classList.remove("m-show");
+    sideEl.style.display="";
+    tabChat.classList.add("active"); tabTree.classList.remove("active");
+  }
+
+  tabTree.addEventListener("click",goTree);
+  tabChat.addEventListener("click",goChat);
+}
 </script>
 </body>
 </html>
