@@ -1094,8 +1094,9 @@
         @media (max-width: 768px) {
             /* 顶栏：压缩间距让所有按钮都能显示 */
             header {
+                height: 44px;
                 gap: 3px;
-                padding: 0 8px
+                padding: 0 6px
             }
 
             header .btn.ghost {
@@ -1114,7 +1115,7 @@
 
             /* 主区域：两个面板叠放，按 tab 切换 */
             main {
-                height: calc(100% - 52px - 48px);
+                height: calc(100% - 44px - 36px);
                 position: relative;
                 overflow: hidden;
             }
@@ -1140,7 +1141,7 @@
 
             /* 对话区 */
             #conv {
-                padding: 10px 12px 6px
+                padding: 8px 8px 4px
             }
 
             .msg.user .bubble {
@@ -1152,34 +1153,32 @@
             }
 
             .bubble {
-                font-size: 14px
+                font-size: 13px
             }
 
             /* 输入区 */
             .composer {
-                padding: 8px 10px
+                padding: 6px 8px
             }
 
             .composer textarea {
-                height: 52px
+                height: 38px;
+                padding: 7px;
+                font-size: 13px
             }
 
             .composer .row {
-                gap: 4px
-            }
-
-            #copyPathBtn {
-                display: none
+                gap: 3px
             }
 
             .send-row {
-                gap: 6px;
+                gap: 4px;
                 flex-wrap: wrap
             }
 
-            /* 触摸目标最小 38px */
+            /* 触摸目标 ≥36px */
             .btn {
-                min-height: 38px
+                min-height: 36px
             }
 
             /* 设置弹窗：底部抽屉，z-index 需高于底部导航栏 (100) */
@@ -1234,7 +1233,7 @@
                 bottom: 0;
                 left: 0;
                 right: 0;
-                height: 48px;
+                height: 36px;
                 background: var(--panel);
                 border-top: 1px solid var(--line);
                 z-index: 100;
@@ -1245,13 +1244,13 @@
                 background: none;
                 border: none;
                 color: var(--muted);
-                font-size: 12px;
+                font-size: 11px;
                 font-family: inherit;
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 5px;
+                gap: 3px;
                 transition: color .15s, background .15s;
                 -webkit-tap-highlight-color: transparent;
             }
@@ -1262,8 +1261,8 @@
             }
 
             .mtab svg {
-                width: 16px;
-                height: 16px;
+                width: 14px;
+                height: 14px;
                 stroke: currentColor;
                 fill: none;
                 stroke-width: 2;
