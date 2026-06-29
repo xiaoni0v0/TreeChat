@@ -820,13 +820,15 @@
         }
 
         .node.pivot-node .card {
-            stroke: var(--ok)
+            stroke: #56e070;
+            stroke-width: 3.5;
+            filter: drop-shadow(0 0 7px rgba(86, 224, 112, .55))
         }
 
         .node.sel .card {
-            stroke: var(--accent);
-            stroke-width: 2.5;
-            filter: drop-shadow(0 0 6px rgba(79, 157, 255, .5))
+            stroke: #7ac4ff;
+            stroke-width: 3.5;
+            filter: drop-shadow(0 0 9px rgba(79, 157, 255, .7))
         }
 
         .node.pending .card {
@@ -885,7 +887,8 @@
         }
 
         .edge.onpath {
-            stroke: var(--accent)
+            stroke: #7ac4ff;
+            stroke-width: 3.5
         }
 
         /* 折叠/展开按钮 */
