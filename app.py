@@ -34,8 +34,6 @@ PROVIDERS = {
     "zhipu": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
 }
-# 服务端持有的状态（内存，不写盘，不读环境变量）。key 由前端从 localStorage 恢复后 POST 过来。
-STATE = {"keys": {p: "" for p in PROVIDERS}}
 
 
 def read_index():
@@ -79,7 +77,7 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self._send(500, {"error": "index.html not found next to app.py"})
         elif self.path == "/api/status":
-            self._send(200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}})
+            self._send(200, {"ok": True})
         elif self.path.startswith("/lib/"):
             self._serve_static(self.path)
         else:
@@ -115,19 +113,6 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- POST ----------
     def do_POST(self):
-        if self.path == "/api/key":
-            try:
-                data = self._read_json()
-            except Exception as e:
-                return self._send(400, {"error": "bad json: %s" % e})
-            provider = (data.get("provider") or "deepseek").strip()
-            key = (data.get("key") or "").strip()
-            if provider in STATE["keys"]:
-                STATE["keys"][provider] = key
-            return self._send(
-                200, {"keys": {p: bool(v) for p, v in STATE["keys"].items()}}
-            )
-
         if self.path == "/api/test-key":
             return self._test_key()
 
@@ -142,13 +127,13 @@ class Handler(BaseHTTPRequestHandler):
             data = self._read_json()
         except Exception as e:
             return self._send(400, {"error": str(e)})
-        provider = (data.get("provider") or "deepseek").strip()
+        provider = (data.get("provider", "")).strip()
         if provider not in PROVIDERS:
-            return self._send(400, {"error": "未知提供商: " + provider})
-        api_key = (data.get("key") or STATE["keys"].get(provider, "")).strip()
+            return self._send(400, {"error": "缺少或未知的提供商"})
+        api_key = (data.get("key", "")).strip()
         if not api_key:
             return self._send(400, {"error": "Key 未设置"})
-        model = (data.get("model") or "").strip()
+        model = (data.get("model", "")).strip()
         payload = json.dumps(
             {
                 "model": model,
@@ -186,11 +171,11 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send(400, {"error": "bad json: %s" % e})
 
-        provider = (data.get("provider") or "deepseek").strip()
+        provider = (data.get("provider", "")).strip()
         if provider not in PROVIDERS:
-            return self._send(400, {"error": "未知提供商: " + provider})
-        # key 优先来自请求体（每用户独立），没有则降级到服务端环境变量
-        api_key = (data.get("key") or STATE["keys"].get(provider, "")).strip()
+            return self._send(400, {"error": "缺少或未知的提供商"})
+        # key 由前端每次请求携带
+        api_key = (data.get("key", "")).strip()
         if not api_key:
             return self._send(
                 401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider}
@@ -199,7 +184,8 @@ class Handler(BaseHTTPRequestHandler):
         # 透传前端 payload，去掉仅供路由用的字段
         payload = {k: v for k, v in data.items() if k not in ("provider", "key")}
         payload["stream"] = True
-        payload.setdefault("model", "deepseek-chat")
+        if not payload.get("model"):
+            return self._send(400, {"error": "缺少 model 参数"})
         payload.setdefault("messages", [])
 
         req = urllib.request.Request(
