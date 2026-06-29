@@ -2945,8 +2945,31 @@
                     : n.user;
                 msgs.push({role: "user", content});
             }
-            if (n.reply) msgs.push({role: "assistant", content: n.reply});
+            if (n.reply) msgs.push({role: "assistant", content: n.reply.trimEnd()});
         });
+        // 续写模式检测：最后一条是 assistant 说明上次生成被中断
+        // 把末尾上下文嵌入指令，帮助模型精确定位续写点（尤其是 LaTeX / 代码块）
+        if (msgs[msgs.length - 1]?.role === "assistant") {
+            const tail = msgs[msgs.length - 1].content.slice(-120);
+            const hint = `[CONTINUATION MODE] The previous assistant message was cut off mid-stream. Your output will be appended character-by-character directly after the interrupted text—no separator, no newline added between them.
+
+The interrupted text ends with (last ~120 chars):
+"""
+${tail}
+"""
+
+Rules (strict):
+- Begin your output with the exact character that should follow the above snippet
+- If the snippet ends mid-LaTeX formula: complete the formula correctly, then continue
+- If mid-code-fence or mid-markdown structure: stay inside it and continue
+- Never echo or repeat any part of the snippet
+- Never add transition phrases ("Continuing…", "As I was saying…", etc.)
+- Never acknowledge the interruption
+- Write as if streaming had never stopped`;
+            const si = msgs.findIndex(m => m.role === "system");
+            if (si >= 0) msgs[si] = {...msgs[si], content: msgs[si].content + "\n\n" + hint};
+            else msgs.unshift({role: "system", content: hint});
+        }
         return msgs;
     }
 
@@ -2985,7 +3008,7 @@
         };
 
         // 在 try 外声明，finally 可以访问
-        let animId = null, animRunning = false, processedUpTo = 0;
+        let animId = null, animRunning = false, processedUpTo = node.reply.length;
         let finishedNormally = false, lastAutoSave = 0;
 
         let convEl, onScroll;
