@@ -1522,8 +1522,8 @@
 <!-- 右键菜单 -->
 <div id="ctxMenu">
     <div class="ctx-node-grp">
-        <div class="ctx-item" id="ctx-pivot"><span class="ctx-lbl">设为主线</span></div>
         <div class="ctx-item" id="ctx-fold"><span class="ctx-lbl">折叠子节点</span><span class="ctx-key">F</span></div>
+        <div class="ctx-item" id="ctx-pivot"><span class="ctx-lbl">设为主线</span><span class="ctx-key">M</span></div>
         <div class="ctx-item danger" id="ctx-del"><span class="ctx-lbl">删除子树</span><span class="ctx-key">Del</span>
         </div>
     </div>
@@ -3993,6 +3993,11 @@ Rules (strict):
                 e.preventDefault();
                 homeView();
                 break;
+            case "m":
+            case "M":
+                e.preventDefault();
+                setPivot(selId);
+                break;
             case "f":
             case "F":
                 e.preventDefault();
@@ -4060,16 +4065,16 @@ Rules (strict):
     }
 
     document.getElementById("pivotBtn").onclick = () => setPivot(selId);
-    document.getElementById("ctx-pivot").onclick = () => {
-        const id = ctxTargetId;
-        hideCtxMenu();
-        setPivot(id);
-    };
 
     document.getElementById("ctx-fold").onclick = () => {
         const id = ctxTargetId;
         hideCtxMenu();
         if (id && nodes[id] && nodes[id].children.length > 0) toggleCollapse(id);
+    };
+    document.getElementById("ctx-pivot").onclick = () => {
+        const id = ctxTargetId;
+        hideCtxMenu();
+        setPivot(id);
     };
     document.getElementById("ctx-del").onclick = () => {
         const id = ctxTargetId;
