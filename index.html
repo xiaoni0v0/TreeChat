@@ -2744,6 +2744,7 @@
    ========================================================= */
     let nodeDrag = null;    // 当前拖拽状态
     let dragHappened = false; // 本次 mousedown 是否发生了真实拖拽
+    let _layoutAnimFrame = 0; // _animateLayoutTransition 当前 rAF 句柄（用于取消并发动画）
     let longPressHappened = false; // 移动端长按触发了菜单（阻止后续合成 click）
 
     function _dragActivate() {
@@ -2986,6 +2987,10 @@
 
     // 通用布局过渡动画：捕获旧位置 → 执行重建 → 从旧位置缓动到新位置
     function _animateLayoutTransition(doRender, duration) {
+        if (_layoutAnimFrame) {
+            cancelAnimationFrame(_layoutAnimFrame);
+            _layoutAnimFrame = 0;
+        }
         duration = duration || 200;
 
         // 1. 记录当前所有节点的 DOM 位置
@@ -3057,7 +3062,8 @@
                 d.g.setAttribute('transform', `translate(${px},${py})`);
             }
             drawEdges(curPos);
-            if (t < 1) requestAnimationFrame(step);
+            if (t < 1) _layoutAnimFrame = requestAnimationFrame(step);
+            else _layoutAnimFrame = 0;
         })(performance.now());
     }
 
