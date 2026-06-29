@@ -3727,7 +3727,19 @@ Rules (strict):
     document.addEventListener("keydown", (e) => {
         const tag = (e.target.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select") return;
-        if (document.querySelector(".mask.show")) return;   // 弹窗开着时不响应
+        // 确认弹窗快捷键（设置弹窗除外）
+        const dlgMask = document.getElementById("dialogMask");
+        if (dlgMask && dlgMask.classList.contains("show")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                document.getElementById("dialogCancel").click();
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("dialogOk").click();
+            }
+            return;
+        }
+        if (document.querySelector(".mask.show")) return;   // 其他弹窗（设置等）开着时不响应
         switch (e.key) {
             case "h":
             case "H":
