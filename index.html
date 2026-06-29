@@ -819,6 +819,10 @@
             stroke: #2c5277
         }
 
+        .node.pivot-node .card {
+            stroke: var(--ok)
+        }
+
         .node.sel .card {
             stroke: var(--accent);
             stroke-width: 2.5;
@@ -1427,6 +1431,9 @@
             <div class="send-row">
                 <span style="color:var(--muted);font-size:12px">深度&nbsp;<b id="depthInfo"
                                                                              style="color:var(--text)">0</b></span>
+                <button class="btn ghost" id="pivotBtn" style="padding:4px 9px;font-size:12px"
+                        title="将根 → 当前节点路径设为主线（垂直排列）">主线
+                </button>
                 <button class="btn ghost" id="copyPathBtn" style="padding:4px 9px;font-size:12px"
                         title="复制根 → 当前节点整条路径（Markdown 原文）">复制
                 </button>
@@ -1512,6 +1519,7 @@
 <!-- 右键菜单 -->
 <div id="ctxMenu">
     <div class="ctx-node-grp">
+        <div class="ctx-item" id="ctx-pivot"><span class="ctx-lbl">设为主线</span></div>
         <div class="ctx-item" id="ctx-fold"><span class="ctx-lbl">折叠子节点</span><span class="ctx-key">F</span></div>
         <div class="ctx-item danger" id="ctx-del"><span class="ctx-lbl">删除子树</span><span class="ctx-key">Del</span>
         </div>
@@ -1672,7 +1680,7 @@
         });
     }
 
-    let nodes = {}, rootId = "root", selId = "root";
+    let nodes = {}, rootId = "root", selId = "root", pivotId = null;
     let uidc = 0;
     const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
 
@@ -1769,6 +1777,7 @@
         nodes[rootId] = {id: rootId, parent: null, user: null, reply: "", reasoning: "", children: [], pending: false};
         _clearAtts();  // fire-and-forget: 清空 IndexedDB
         selId = rootId;
+        pivotId = null;
     }
 
     function save() {
@@ -1781,6 +1790,7 @@
                 cfg,
                 rootId,
                 selId,
+                pivotId,
                 nodes: lean,
                 view: {tx: view.tx, ty: view.ty, s: view.s}
             }));
@@ -1801,6 +1811,7 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
+                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : null;
                 if (d.view) {
                     Object.assign(view, d.view);
                     view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
@@ -1876,6 +1887,7 @@
         nodes[par].children = nodes[par].children.filter(c => c !== id);
         kill.forEach(k => delete nodes[k]);
         cfg.collapsedIds = (cfg.collapsedIds || []).filter(x => !kill.includes(x));
+        if (kill.includes(pivotId)) pivotId = null;
         _delAtts(kill);  // fire-and-forget: 清理 IndexedDB 附件
         selId = par;
     }
@@ -1986,6 +1998,18 @@
     function layout() {
         const collapsedSet = new Set(cfg.collapsedIds || []);
         let nextX = 0;
+
+        // 主线：为路径上每个节点记录"哪个子节点是主路径上的下一节点"
+        const mainPathNext = {};
+        if (pivotId && pivotId !== rootId && nodes[pivotId]) {
+            let cur = pivotId;
+            while (nodes[cur] && nodes[cur].parent) {
+                const par = nodes[cur].parent;
+                mainPathNext[par] = cur;
+                cur = par;
+            }
+        }
+
         (function rec(id, depth) {
             const n = nodes[id];
             n.depth = depth;
@@ -1996,8 +2020,14 @@
                 n.gx = nextX++;
             } else {
                 n.children.forEach(c => rec(c, depth + 1));
-                const f = nodes[n.children[0]].gx, l = nodes[n.children[n.children.length - 1]].gx;
-                n.gx = (f + l) / 2;
+                const mpChild = mainPathNext[id];
+                if (mpChild && nodes[mpChild]) {
+                    // 主路径节点：对齐到主路径子节点的 x，令路径垂直
+                    n.gx = nodes[mpChild].gx;
+                } else {
+                    const f = nodes[n.children[0]].gx, l = nodes[n.children[n.children.length - 1]].gx;
+                    n.gx = (f + l) / 2;
+                }
             }
             n.px = n.gx * getHGAP() + 40;
             n.py = depth * VGAP + 30;
@@ -2060,7 +2090,7 @@
             if (!visible.has(id)) continue;
             const n = nodes[id];
             const g = el("g", {
-                class: "node" + (id === rootId ? " root" : "") + (id === selId ? " sel" : "") + (n.pending ? " pending" : "") + (!n.pending && n.completed === false ? " incomplete" : ""),
+                class: "node" + (id === rootId ? " root" : "") + (id === selId ? " sel" : "") + (n.pending ? " pending" : "") + (!n.pending && n.completed === false ? " incomplete" : "") + (id === pivotId ? " pivot-node" : ""),
                 transform: `translate(${n.px},${n.py})`,
                 "data-id": id
             });
@@ -2714,6 +2744,17 @@
     let longPressHappened = false; // 移动端长按触发了菜单（阻止后续合成 click）
 
     function _dragActivate() {
+        // 禁止拖拽主路径上的节点（主路径靠 _animateLayoutTransition 保持竖直，不可乱序）
+        if (pivotId && pivotId !== rootId && nodes[pivotId]) {
+            let _c = pivotId;
+            while (_c && nodes[_c]) {
+                if (_c === nodeDrag.id) {
+                    nodeDrag = null;
+                    return;
+                }
+                _c = nodes[_c].parent;
+            }
+        }
         dragHappened = true;
         nodeDrag.dragging = true;
 
@@ -2766,11 +2807,14 @@
         // 每帧更新子树内部边
         _redrawSubtreeEdges(dx, sdy);
 
-        // 每帧更新父→B 活动连线
+        // 每帧更新父→B 活动连线（读当前 DOM 位置，父节点可能在上一帧动画中已移动）
         if (nodeDrag.dragEdgeEl) {
-            const par = nodeDrag.savedPositions[nodeDrag.parentId];
+            const parEl = gNodes.querySelector(`[data-id="${nodeDrag.parentId}"]`);
+            const parM = parEl && (parEl.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
+            const parPx = parM ? parseFloat(parM[1]) : nodeDrag.savedPositions[nodeDrag.parentId].px;
+            const parPy = parM ? parseFloat(parM[2]) : nodeDrag.savedPositions[nodeDrag.parentId].py;
             const ph = nodes[nodeDrag.parentId].h;
-            const x1 = par.px + nw / 2, y1 = par.py + ph + 10;
+            const x1 = parPx + nw / 2, y1 = parPy + ph + 10;
             const x2 = nodeDrag.origPx + dx + nw / 2, y2 = nodeDrag.origPy + sdy;
             const my = (y1 + y2) / 2;
             nodeDrag.dragEdgeEl.setAttribute("d", `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
@@ -2793,6 +2837,7 @@
         const tempOrder = [...sibs];
         tempOrder.splice(newIdx, 0, nodeDrag.id);
         const parent = nodes[nodeDrag.parentId];
+
         parent.children = tempOrder;
         layout();
         const visible = getVisibleSet();
@@ -2936,6 +2981,83 @@
         // dragEdgeEl 在此之后才创建，无需挂回
     }
 
+    // 通用布局过渡动画：捕获旧位置 → 执行重建 → 从旧位置缓动到新位置
+    function _animateLayoutTransition(doRender, duration) {
+        duration = duration || 200;
+
+        // 1. 记录当前所有节点的 DOM 位置
+        const oldPos = {};
+        gNodes.querySelectorAll('[data-id]').forEach(g => {
+            const m = (g.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
+            if (m) oldPos[g.dataset.id] = {px: parseFloat(m[1]), py: parseFloat(m[2])};
+        });
+
+        // 2. 重建 DOM（含新布局）
+        doRender();
+
+        // 3. 收集需要动画的节点（新旧 DOM 都存在）
+        const animData = {};
+        gNodes.querySelectorAll('[data-id]').forEach(g => {
+            const nid = g.dataset.id;
+            if (!oldPos[nid] || !nodes[nid]) return;
+            animData[nid] = {g, sx: oldPos[nid].px, sy: oldPos[nid].py, ex: nodes[nid].px, ey: nodes[nid].py};
+        });
+
+        // 4. 把节点瞬间打回旧位置，并同步重绘边
+        const drawEdges = (posMap) => {
+            gEdges.innerHTML = '';
+            const nw = getNW();
+            const onPath = new Set(pathTo(selId).map(n => n.id));
+            const vis = getVisibleSet();
+            for (const nid of vis) {
+                if (!nodes[nid]) continue;
+                const n = nodes[nid];
+                const px_n = posMap[nid] ? posMap[nid].px : n.px;
+                const py_n = posMap[nid] ? posMap[nid].py : n.py;
+                (n.children || []).forEach(cid => {
+                    if (!vis.has(cid) || !nodes[cid]) return;
+                    const c = nodes[cid];
+                    const px_c = posMap[cid] ? posMap[cid].px : c.px;
+                    const py_c = posMap[cid] ? posMap[cid].py : c.py;
+                    const x1 = px_n + nw / 2, y1 = py_n + n.h + 10;
+                    const x2 = px_c + nw / 2, y2 = py_c;
+                    const my = (y1 + y2) / 2;
+                    gEdges.appendChild(el('path', {
+                        d: `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`,
+                        class: onPath.has(nid) && onPath.has(cid) ? 'edge onpath' : 'edge'
+                    }));
+                });
+            }
+        };
+
+        const startPos = {};
+        for (const nid in animData) {
+            const d = animData[nid];
+            d.g.setAttribute('transform', `translate(${d.sx},${d.sy})`);
+            startPos[nid] = {px: d.sx, py: d.sy};
+        }
+        drawEdges(startPos);
+
+        // 无位移时直接返回
+        if (!Object.values(animData).some(d => Math.abs(d.ex - d.sx) > 0.5 || Math.abs(d.ey - d.sy) > 0.5)) return;
+
+        // 5. rAF 缓动
+        const t0 = performance.now();
+        (function step(now) {
+            const t = Math.min(1, (now - t0) / duration);
+            const ease = 1 - Math.pow(1 - t, 3);
+            const curPos = {};
+            for (const nid in animData) {
+                const d = animData[nid];
+                const px = d.sx + (d.ex - d.sx) * ease, py = d.sy + (d.ey - d.sy) * ease;
+                curPos[nid] = {px, py};
+                d.g.setAttribute('transform', `translate(${px},${py})`);
+            }
+            drawEdges(curPos);
+            if (t < 1) requestAnimationFrame(step);
+        })(performance.now());
+    }
+
     function _dragFinish() {
         if (!nodeDrag) return;
         if (nodeDrag.animFrame) {
@@ -2953,7 +3075,7 @@
             save();
         }
         nodeDrag = null; // 先清除，让 renderTree 守卫放行
-        if (wasDragging) renderTree();
+        if (wasDragging) _animateLayoutTransition(() => renderTree());
         setTimeout(() => {
             dragHappened = false;
         }, 0);
@@ -3665,6 +3787,7 @@ Rules (strict):
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
+                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : null;
                 if (d.view) {
                     Object.assign(view, d.view);
                     view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
@@ -3805,6 +3928,19 @@ Rules (strict):
             showCtxMenu(e, nodeEl.dataset.id);
         } else showCtxMenu(e, null);
     });
+
+    function setPivot(id) {
+        pivotId = (id === rootId) ? null : id;
+        save();
+        _animateLayoutTransition(() => renderAll());
+    }
+
+    document.getElementById("pivotBtn").onclick = () => setPivot(selId);
+    document.getElementById("ctx-pivot").onclick = () => {
+        const id = ctxTargetId;
+        hideCtxMenu();
+        setPivot(id);
+    };
 
     document.getElementById("ctx-fold").onclick = () => {
         const id = ctxTargetId;
