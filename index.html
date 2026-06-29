@@ -2401,9 +2401,16 @@
         save();
     }
 
+    function scrollToBottom() {
+        const conv = document.getElementById("conv");
+        if (conv) conv.scrollTop = conv.scrollHeight;
+    }
+
     function select(id, {noSwitch = false} = {}) {
         selId = id;
         renderAll();
+        // 滚动到对话底部，避免用户误以为输出被截断
+        scrollToBottom();
         // 移动端：选中节点后自动切到对话视图（长按时不跳转）
         if (!noSwitch && window.innerWidth <= 768) {
             const tc = document.getElementById("tabChat");
@@ -3814,6 +3821,7 @@ Rules (strict):
             sideEl.style.display = "flex";
             tabChat.classList.add("active");
             tabTree.classList.remove("active");
+            scrollToBottom();
         }
 
         tabTree.addEventListener("click", goTree);
