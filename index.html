@@ -2403,7 +2403,10 @@
 
     function scrollToBottom() {
         const conv = document.getElementById("conv");
-        if (conv) conv.scrollTop = conv.scrollHeight;
+        if (conv) {
+            conv.scrollTop = conv.scrollHeight;
+            conv.dataset.pinReset = "1";  // 通知 stream 的 onScroll 重置 pinToBottom
+        }
     }
 
     function select(id, {noSwitch = false} = {}) {
@@ -3068,12 +3071,19 @@ Rules (strict):
                 msgEl.parentNode.insertBefore(el, msgEl);
                 return el.querySelector(".think-body");
             };
-            // scrollTop 减小 = 用户主动上滚，立刻脱钩；滚回底部才恢复
+            // 自动跟滚：用户上滚立即脱钩，滚回底部附近恢复跟滚
             let pinToBottom = true, lastST = convEl.scrollTop;
             onScroll = () => {
                 const cur = convEl.scrollTop;
-                if (cur < lastST - 4) pinToBottom = false;           // 向上滚了 >4px
-                else if (convEl.scrollHeight - cur - convEl.clientHeight < 30) pinToBottom = true; // 到底了
+                // 外部重置标记（从别的节点切回正在生成的节点时）
+                if (convEl.dataset.pinReset === "1") {
+                    pinToBottom = true;
+                    lastST = cur;
+                    delete convEl.dataset.pinReset;
+                    return;
+                }
+                if (cur < lastST - 2) pinToBottom = false;           // 上滚 >2px 立即脱钩
+                else if (convEl.scrollHeight - cur - convEl.clientHeight < 80) pinToBottom = true; // 距底 <80px 恢复
                 lastST = cur;
             };
             convEl.addEventListener("scroll", onScroll, {passive: true});
@@ -3101,7 +3111,7 @@ Rules (strict):
                         b.classList.remove("cursor-blink");
                         const showCursor = node.pending || processedUpTo < node.reply.length;
                         b.innerHTML = mdToHtmlLive(node.reply.slice(0, processedUpTo) + (showCursor ? '▌' : ''));
-                        if (pinToBottom) convEl.scrollTop = convEl.scrollHeight;
+                        if (pinToBottom && convEl.scrollHeight - convEl.scrollTop - convEl.clientHeight < 80) convEl.scrollTop = convEl.scrollHeight;
                     }
                 }
                 const remaining = node.reply.length - processedUpTo;
