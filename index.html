@@ -3100,6 +3100,7 @@
                         }
                         if (obj.error) {
                             node.reply += "\n⚠️ " + JSON.stringify(obj.error.body || obj.error);
+                            finishedNormally = true;  // SSE err final
                             continue;
                         }
                         const delta = obj.choices && obj.choices[0] && obj.choices[0].delta;
