@@ -2045,6 +2045,10 @@
                     dragHappened = false;
                     return;
                 }
+                if (longPressHappened) {
+                    longPressHappened = false;
+                    return;
+                }
                 select(id);
             });
             gNodes.appendChild(g);
@@ -2386,11 +2390,11 @@
         save();
     }
 
-    function select(id) {
+    function select(id, {noSwitch = false} = {}) {
         selId = id;
         renderAll();
-        // 移动端：选中节点后自动切到对话视图
-        if (window.innerWidth <= 768) {
+        // 移动端：选中节点后自动切到对话视图（长按时不跳转）
+        if (!noSwitch && window.innerWidth <= 768) {
             const tc = document.getElementById("tabChat");
             if (tc && !tc.classList.contains("active")) tc.click();
         }
@@ -2490,18 +2494,30 @@
                         };
                     }
                     lpTimer = setTimeout(() => {
+                        lpTimer = null;
+                        longPressHappened = true;
+                        nodeDrag = null;
                         navigator.vibrate && navigator.vibrate(40);
-                        select(nid);
+                        select(nid, {noSwitch: true});
                         showCtxMenu({
                             clientX: cx, clientY: cy, preventDefault: () => {
                             }
                         }, nid);
-                        lpTimer = null;
                     }, 600);
                 } else if (!e.target.closest(".tog-bg")) {
                     e.preventDefault();
-                    tPan = {x: e.touches[0].clientX, y: e.touches[0].clientY, tx: view.tx, ty: view.ty};
+                    const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
+                    tPan = {x: cx, y: cy, tx: view.tx, ty: view.ty};
                     tPinch = null;
+                    lpTimer = setTimeout(() => {
+                        lpTimer = null;
+                        tPan = null;
+                        navigator.vibrate && navigator.vibrate(20);
+                        showCtxMenu({
+                            clientX: cx, clientY: cy, preventDefault: () => {
+                            }
+                        }, null);
+                    }, 600);
                 }
             } else if (e.touches.length >= 2) {
                 e.preventDefault();
@@ -2573,6 +2589,7 @@
             lpTimer = null;
             nodeDrag = null;
             dragHappened = false;
+            longPressHappened = false;
             tPan = null;
             tPinch = null;
         }, {passive: true});
@@ -2588,6 +2605,7 @@
    ========================================================= */
     let nodeDrag = null;    // 当前拖拽状态
     let dragHappened = false; // 本次 mousedown 是否发生了真实拖拽
+    let longPressHappened = false; // 移动端长按触发了菜单（阻止后续合成 click）
 
     function _dragActivate() {
         dragHappened = true;
@@ -3613,10 +3631,14 @@
     function hideCtxMenu() {
         ctxMenu.style.display = "none";
         ctxTargetId = null;
+        longPressHappened = false;
     }
 
     // 禁用原生右键菜单，接管为自定义
+    // 移动端长按由 lpTimer 处理，contextmenu 只阻止系统菜单后直接返回
     svg.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (window.innerWidth <= 768) return;
         const nodeEl = e.target.closest(".node");
         if (nodeEl) {
             select(nodeEl.dataset.id);
