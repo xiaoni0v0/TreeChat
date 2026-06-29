@@ -3,13 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="dark light">
     <title>TreeChat · 树状 AI 对话</title>
     <link rel="icon" type="image/svg+xml"
           href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230e1116'/><line x1='16' y1='9' x2='8' y2='18' stroke='%233a4a5e' stroke-width='2'/><line x1='16' y1='9' x2='24' y2='18' stroke='%233a4a5e' stroke-width='2'/><line x1='8' y1='18' x2='5' y2='27' stroke='%233a4a5e' stroke-width='2'/><line x1='8' y1='18' x2='12' y2='27' stroke='%233a4a5e' stroke-width='2'/><line x1='24' y1='18' x2='24' y2='27' stroke='%233a4a5e' stroke-width='2'/><circle cx='8' cy='18' r='3.5' fill='%234f9dff'/><circle cx='24' cy='18' r='3.5' fill='%234f9dff'/><circle cx='5' cy='27' r='2.5' fill='%237c5cff'/><circle cx='12' cy='27' r='2.5' fill='%234f9dff'/><circle cx='24' cy='27' r='2.5' fill='%237c5cff'/><circle cx='16' cy='9' r='4.5' fill='%234f9dff'/></svg>">
     <style>
         :root {
-            color-scheme: dark;
+            color-scheme: dark light;
             --bg: #0e1116;
             --panel: #161b22;
             --panel2: #1c2330;
@@ -24,6 +24,26 @@
             --ok: #3fb950;
             --radius: 12px;
             --font: -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            /* 主题专用变量 */
+            --header-bg: linear-gradient(180deg, #171d27, #12161d);
+            --tree-dot: #1c2430;
+            --hint-bg: rgba(0, 0, 0, .35);
+            --think-bg: #161d2a;
+            --code-bg: #0c1219;
+            --table-head-bg: #1b2330;
+            --imgviewer-bg: rgba(0, 0, 0, .88);
+            --mask-bg: rgba(0, 0, 0, .55);
+            --root-fill: #13283a;
+            --root-stroke: #2c5277;
+            --qline-fill: #8fc2ff;
+            --sub-fill: #cdd6e0;
+            --edge-color: #3a4658;
+            --tog-fill: #1c2d3e;
+            --tog-stroke: #3a5068;
+            --tog-hover-fill: #263d55;
+            --ctx-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+            --drag-shadow: drop-shadow(0 6px 18px rgba(0, 0, 0, .55));
+            --drop-overlay-bg: rgba(0, 0, 0, .5);
         }
 
         #tree {
@@ -58,7 +78,7 @@
             align-items: center;
             gap: 12px;
             padding: 0 14px;
-            background: linear-gradient(180deg, #171d27, #12161d);
+            background: var(--header-bg);
             border-bottom: 1px solid var(--line);
             overflow: hidden;
         }
@@ -169,7 +189,7 @@
         #treeWrap {
             flex: 1.25;
             position: relative;
-            background: radial-gradient(circle at 1px 1px, #1c2430 1px, transparent 0) 0 0/22px 22px, var(--bg);
+            background: radial-gradient(circle at 1px 1px, var(--tree-dot) 1px, transparent 0) 0 0/22px 22px, var(--bg);
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
@@ -206,7 +226,7 @@
             bottom: 10px;
             font-size: 12px;
             color: var(--muted);
-            background: rgba(0, 0, 0, .35);
+            background: var(--hint-bg);
             padding: 6px 10px;
             border-radius: 8px;
             pointer-events: none
@@ -337,6 +357,7 @@
 
         .msg.user .bubble {
             background: var(--user);
+            color: #fff;
             border-bottom-right-radius: 4px;
             max-width: 88%
         }
@@ -360,7 +381,7 @@
             color: var(--muted);
             border-left: 2px solid var(--accent2);
             margin: 2px 0;
-            background: #161d2a;
+            background: var(--think-bg);
             border-radius: 6px
         }
 
@@ -464,7 +485,7 @@
         }
 
         .bubble.md code {
-            background: #0c1219;
+            background: var(--code-bg);
             border: 1px solid var(--line);
             border-radius: 5px;
             padding: .1em .35em;
@@ -473,7 +494,7 @@
         }
 
         .bubble.md pre {
-            background: #0c1219;
+            background: var(--code-bg);
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 10px 12px;
@@ -512,7 +533,7 @@
         }
 
         .bubble.md th {
-            background: #1b2330
+            background: var(--table-head-bg)
         }
 
         .bubble.md a {
@@ -703,7 +724,7 @@
         #imgViewer {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, .88);
+            background: var(--imgviewer-bg);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -722,7 +743,7 @@
         .mask {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, .55);
+            background: var(--mask-bg);
             display: none;
             align-items: center;
             justify-content: center;
@@ -815,8 +836,8 @@
         }
 
         .node.root .card {
-            fill: #13283a;
-            stroke: #2c5277
+            fill: var(--root-fill);
+            stroke: var(--root-stroke)
         }
 
         .node.pivot-node .card {
@@ -844,7 +865,7 @@
 
         .node.drag-ghost .card {
             opacity: .6;
-            filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .55));
+            filter: var(--drag-shadow);
             stroke: var(--accent);
             stroke-width: 2
         }
@@ -862,12 +883,12 @@
         }
 
         .node .qline {
-            fill: #8fc2ff;
+            fill: var(--qline-fill);
             font-size: 12.5px
         }
 
         .node .sub {
-            fill: #cdd6e0;
+            fill: var(--sub-fill);
             font-size: 12.5px
         }
 
@@ -881,7 +902,7 @@
         }
 
         .edge {
-            stroke: #3a4658;
+            stroke: var(--edge-color);
             stroke-width: 2;
             fill: none
         }
@@ -893,15 +914,15 @@
 
         /* 折叠/展开按钮 */
         .tog-bg {
-            fill: #1c2d3e;
-            stroke: #3a5068;
+            fill: var(--tog-fill);
+            stroke: var(--tog-stroke);
             stroke-width: 1.5;
             cursor: pointer;
             transition: .12s
         }
 
         .tog-bg:hover {
-            fill: #263d55;
+            fill: var(--tog-hover-fill);
             stroke: var(--accent)
         }
 
@@ -922,7 +943,7 @@
             border-radius: 10px;
             padding: 5px;
             min-width: 160px;
-            box-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+            box-shadow: var(--ctx-shadow);
         }
 
         .ctx-item {
@@ -1126,7 +1147,7 @@
             position: fixed;
             inset: 0;
             z-index: 500;
-            background: rgba(0, 0, 0, .5);
+            background: var(--drop-overlay-bg);
             align-items: center;
             justify-content: center;
             pointer-events: none;
@@ -1371,6 +1392,63 @@
                 stroke-linecap: round;
                 stroke-linejoin: round;
                 flex-shrink: 0
+            }
+        }
+
+        /* ================================================================
+           浅色模式（跟随系统 / 浏览器偏好）
+           ================================================================ */
+        @media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+                /* 基础调色板 */
+                --bg: #f5f7fa;
+                --panel: #ffffff;
+                --panel2: #f0f2f5;
+                --line: #d0d7de;
+                --text: #24292f;
+                --muted: #57606a;
+                --accent: #0969da;
+                --accent2: #6e40c9;
+                --user: #0969da;
+                --ai: #f6f8fa;
+                --danger: #cf222e;
+                --ok: #1a7f37;
+                /* 主题专用变量 */
+                --header-bg: linear-gradient(180deg, #f0f2f5, #e8eaed);
+                --tree-dot: #dde3ea;
+                --hint-bg: rgba(255, 255, 255, .82);
+                --think-bg: #eef2f7;
+                --code-bg: #f1f3f5;
+                --table-head-bg: #e8ecf0;
+                --imgviewer-bg: rgba(0, 0, 0, .85);
+                --mask-bg: rgba(0, 0, 0, .4);
+                --root-fill: #dbeafe;
+                --root-stroke: #5294d6;
+                --qline-fill: #0550ae;
+                --sub-fill: #444d58;
+                --edge-color: #b0bac5;
+                --tog-fill: #e3eaf2;
+                --tog-stroke: #a0b4c8;
+                --tog-hover-fill: #ccdaed;
+                --ctx-shadow: 0 8px 28px rgba(0, 0, 0, .12);
+                --drag-shadow: drop-shadow(0 6px 18px rgba(0, 0, 0, .18));
+                --drop-overlay-bg: rgba(0, 0, 0, .35);
+            }
+
+            /* 浅色下加深高亮色，保证在白色卡片/浅色画布上的对比度 */
+            .node.sel .card {
+                stroke: #0969da;
+                filter: drop-shadow(0 0 9px rgba(9, 105, 218, .45))
+            }
+
+            .node.pivot-node .card {
+                stroke: #16a34a;
+                filter: drop-shadow(0 0 7px rgba(22, 163, 74, .45))
+            }
+
+            .edge.onpath {
+                stroke: #0969da
             }
         }
     </style>
