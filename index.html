@@ -1732,7 +1732,10 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
-                if (d.view) Object.assign(view, d.view);
+                if (d.view) {
+                    Object.assign(view, d.view);
+                    view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
+                }
                 // 修复意外中断：上次关闭时正在生成的节点，标为"未完成"而非永久等待
                 Object.values(nodes).forEach(n => {
                     if (n.pending) {
@@ -1939,9 +1942,11 @@
     const vp = document.getElementById("viewport");
     const gEdges = document.getElementById("edges");
     const gNodes = document.getElementById("nodes");
+    const ZOOM_MIN = 0.3, ZOOM_MAX = 2.2;
     let view = {tx: 60, ty: 40, s: 1};
 
     function applyView() {
+        view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));  // 防越界（旧存档恢复 / 边界情况）
         vp.setAttribute("transform", `translate(${view.tx},${view.ty}) scale(${view.s})`);
         clearTimeout(_viewSaveTimer);
         _viewSaveTimer = setTimeout(() => save(), 500);
@@ -2466,7 +2471,7 @@
         e.preventDefault();
         const r = svg.getBoundingClientRect();
         const mx = e.clientX - r.left, my = e.clientY - r.top;
-        const ns = Math.min(2.2, Math.max(0.3, view.s * (e.deltaY < 0 ? 1.1 : 0.9)));
+        const ns = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s * (e.deltaY < 0 ? 1.1 : 0.9)));
         view.tx = mx - (mx - view.tx) * (ns / view.s);
         view.ty = my - (my - view.ty) * (ns / view.s);
         view.s = ns;
@@ -2568,7 +2573,7 @@
             } else if (e.touches.length >= 2 && tPinch) {
                 e.preventDefault();
                 const d = tDist(e.touches);
-                const ns = Math.min(2.2, Math.max(0.3, tPinch.s * (d / tPinch.d)));
+                const ns = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, tPinch.s * (d / tPinch.d)));
                 const r = svg.getBoundingClientRect();
                 const cx = tPinch.cx - r.left, cy = tPinch.cy - r.top;
                 view.tx = cx - (cx - tPinch.tx) * (ns / tPinch.s);
@@ -2873,7 +2878,7 @@
         });
         const r = svg.getBoundingClientRect();
         const w = maxx - minx + 80, h = maxy - miny + 80;
-        const s = Math.min(1.4, Math.min(r.width / w, r.height / h));
+        const s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(r.width / w, r.height / h)));
         view.s = s;
         view.tx = (r.width - w * s) / 2 - minx * s + 40 * s;
         view.ty = 20;
@@ -2885,11 +2890,11 @@
         fit();
     };
     document.getElementById("zoomIn").onclick = () => {
-        view.s = Math.min(2.2, view.s * 1.15);
+        view.s = Math.min(ZOOM_MAX, view.s * 1.15);
         applyView();
     };
     document.getElementById("zoomOut").onclick = () => {
-        view.s = Math.max(0.3, view.s * 0.87);
+        view.s = Math.max(ZOOM_MIN, view.s * 0.87);
         applyView();
     };
 
@@ -3327,13 +3332,14 @@ Rules (strict):
         openModal("dialogMask");
     }
 
-    // H 键：保持当前缩放，把根节点移到视口顶部中央
+    // H 键 / 右键空白"回到根"：重置缩放并移到根节点顶部中央
     function homeView() {
         const n = nodes[rootId];
         if (!n || n.px == null) {
             layout();
         }
         const r = svg.getBoundingClientRect();
+        view.s = 1;  // 恢复默认缩放
         view.tx = r.width / 2 - (n.px + getNW() / 2) * view.s;
         view.ty = 40 - n.py * view.s;
         applyView();
@@ -3550,7 +3556,10 @@ Rules (strict):
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
-                if (d.view) Object.assign(view, d.view);
+                if (d.view) {
+                    Object.assign(view, d.view);
+                    view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
+                }
                 renderAll();
                 fit();
             };
