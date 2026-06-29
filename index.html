@@ -276,17 +276,15 @@
             color: var(--muted);
             letter-spacing: .4px;
             display: flex;
-            justify-content: space-between;
             align-items: baseline;
-            gap: 8px
+            gap: 6px
         }
 
-        .msg .who .ts {
+        .msg-ts {
             font-size: 10px;
-            opacity: .55;
+            opacity: .38;
             font-weight: 400;
-            letter-spacing: 0;
-            flex-shrink: 0
+            letter-spacing: 0
         }
 
         .bubble {
@@ -517,6 +515,10 @@
             display: flex;
             gap: 6px;
             margin-top: 3px
+        }
+
+        .msg.ai .msg-actions {
+            align-self: flex-start
         }
 
         .copy-btn {
@@ -2150,8 +2152,12 @@
         nameSpan.textContent = who;
         w.appendChild(nameSpan);
         if (time) {
+            const sep = document.createElement("span");
+            sep.textContent = "·";
+            sep.style.opacity = ".25";
+            w.appendChild(sep);
             const ts = document.createElement("span");
-            ts.className = "ts";
+            ts.className = "msg-ts";
             ts.textContent = time;
             w.appendChild(ts);
         }
@@ -2184,8 +2190,8 @@
             const act = document.createElement("div");
             act.className = "msg-actions";
             if (copySrc != null) act.appendChild(mkCopyBtn("复制", "复制原文", copySrc));
-            if (resumeFn != null) act.appendChild(mkResumeBtn(resumeFn));
             if (regenFn != null) act.appendChild(mkRegenBtn(regenFn));
+            if (resumeFn != null) act.appendChild(mkResumeBtn(resumeFn));
             d.appendChild(act);
         }
         return d;
@@ -2950,10 +2956,10 @@
         // 续写模式检测：最后一条是 assistant 说明上次生成被中断
         // 把末尾上下文嵌入指令，帮助模型精确定位续写点（尤其是 LaTeX / 代码块）
         if (msgs[msgs.length - 1]?.role === "assistant") {
-            const tail = msgs[msgs.length - 1].content.slice(-120);
+            const tail = msgs[msgs.length - 1].content.slice(-320);
             const hint = `[CONTINUATION MODE] The previous assistant message was cut off mid-stream. Your output will be appended character-by-character directly after the interrupted text—no separator, no newline added between them.
 
-The interrupted text ends with (last ~120 chars):
+The interrupted text ends with (last ~320 chars):
 """
 ${tail}
 """
