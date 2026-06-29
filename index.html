@@ -247,10 +247,45 @@
             font-weight: 600
         }
 
+        #conv-wrap {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-height: 0
+        }
+
         #conv {
             flex: 1;
             overflow: auto;
             padding: 16px 16px 8px
+        }
+
+        #scrollBottomBtn {
+            position: absolute;
+            bottom: 14px;
+            right: 14px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--panel2);
+            border: 1px solid var(--line);
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .15s;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .18)
+        }
+
+        #scrollBottomBtn.visible {
+            opacity: 1;
+            pointer-events: auto
         }
 
         .msg {
@@ -1351,7 +1386,10 @@
     <div id="divider"></div>
     <div id="side">
         <div class="crumbs" id="crumbs"></div>
-        <div id="conv"></div>
+        <div id="conv-wrap">
+            <div id="conv"></div>
+            <button id="scrollBottomBtn" title="滚动到底部">↓</button>
+        </div>
         <div class="composer">
             <textarea id="input" placeholder="输入消息，Enter 发送 / Shift+Enter 换行 …"></textarea>
             <div id="attachPreview" class="attach-preview" style="display:none"></div>
@@ -2409,6 +2447,22 @@
         }
     }
 
+    {
+        const conv = document.getElementById("conv");
+        const btn = document.getElementById("scrollBottomBtn");
+        const THRESHOLD = 200;
+
+        function updateScrollBtn() {
+            const dist = conv.scrollHeight - conv.scrollTop - conv.clientHeight;
+            btn.classList.toggle("visible", dist > THRESHOLD);
+        }
+
+        conv.addEventListener("scroll", updateScrollBtn, {passive: true});
+        btn.addEventListener("click", () => {
+            scrollToBottom();
+        });
+    }
+
     function select(id, {noSwitch = false} = {}) {
         selId = id;
         renderAll();
@@ -3071,19 +3125,25 @@ Rules (strict):
                 msgEl.parentNode.insertBefore(el, msgEl);
                 return el.querySelector(".think-body");
             };
-            // 自动跟滚：用户上滚立即脱钩，滚回底部附近恢复跟滚
-            let pinToBottom = true, lastST = convEl.scrollTop;
+            // 自动跟滚：用户主动上滚脱钩，主动下滚到底部附近才恢复
+            let pinToBottom = true, lastST = convEl.scrollTop, userDetached = false;
             onScroll = () => {
                 const cur = convEl.scrollTop;
                 // 外部重置标记（从别的节点切回正在生成的节点时）
                 if (convEl.dataset.pinReset === "1") {
                     pinToBottom = true;
+                    userDetached = false;
                     lastST = cur;
                     delete convEl.dataset.pinReset;
                     return;
                 }
-                if (cur < lastST - 2) pinToBottom = false;           // 上滚 >2px 立即脱钩
-                else if (convEl.scrollHeight - cur - convEl.clientHeight < 80) pinToBottom = true; // 距底 <80px 恢复
+                if (cur < lastST - 2) {
+                    pinToBottom = false;
+                    userDetached = true;   // 用户主动上滚，记下
+                } else if (userDetached && cur > lastST + 2 && convEl.scrollHeight - cur - convEl.clientHeight < 80) {
+                    pinToBottom = true;    // 用户主动下滚到底部附近，恢复
+                    userDetached = false;
+                }
                 lastST = cur;
             };
             convEl.addEventListener("scroll", onScroll, {passive: true});
