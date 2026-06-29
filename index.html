@@ -1154,13 +1154,13 @@
         @media (max-width: 768px) {
             /* 顶栏：压缩间距让所有按钮都能显示 */
             header {
-                height: 44px;
+                height: 40px;
                 gap: 3px;
                 padding: 0 6px
             }
 
             header .btn.ghost {
-                padding: 5px 8px;
+                padding: 3px 7px;
                 font-size: 12px
             }
 
@@ -1175,7 +1175,7 @@
 
             /* 主区域：两个面板叠放，按 tab 切换 */
             main {
-                height: calc(100% - 44px - 36px);
+                height: calc(100% - 40px - 36px);
                 position: relative;
                 overflow: hidden;
             }
@@ -1222,12 +1222,12 @@
 
             /* 输入区 */
             .composer {
-                padding: 6px 8px
+                padding: 4px 6px
             }
 
             .composer textarea {
-                height: 38px;
-                padding: 7px;
+                height: 36px;
+                padding: 6px 7px;
                 font-size: 13px
             }
 
@@ -1236,13 +1236,13 @@
             }
 
             .send-row {
-                gap: 4px;
+                gap: 3px;
                 flex-wrap: wrap
             }
 
-            /* 触摸目标 ≥36px */
+            /* 触摸目标 ≥32px */
             .btn {
-                min-height: 36px
+                min-height: 32px
             }
 
             /* 设置弹窗：底部抽屉，z-index 需高于底部导航栏 (100) */
@@ -1288,6 +1288,37 @@
             /* 提示文字（桌面专属） */
             .hint {
                 display: none
+            }
+
+            /* 设置弹窗紧凑化 */
+            .modal {
+                padding: 14px
+            }
+
+            .modal label {
+                margin: 8px 0 3px
+            }
+
+            .modal .actions {
+                margin-top: 12px
+            }
+
+            .pcard {
+                padding: 7px 5px;
+                gap: 4px
+            }
+
+            .pdet {
+                padding-top: 8px;
+                margin-top: 6px
+            }
+
+            .stab {
+                padding: 5px 12px
+            }
+
+            .stab-nav {
+                margin-bottom: 10px
             }
 
             /* ---- 底部导航栏 ---- */
