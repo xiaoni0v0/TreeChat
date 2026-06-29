@@ -1895,10 +1895,11 @@
         selId = par;
     }
 
-    // 折叠/展开某节点的子分支
-    // 操作后补偿 view.tx，让被操作节点保持在原来的屏幕 x 位置
+    // 折叠/展开某节点的子分支：被操作节点在屏幕上不动，其他节点缓动
+    // 折叠：子节点向锚点聚合后消失；展开：子节点从锚点喷出（_animateLayoutTransition step 4）
     function toggleCollapse(id) {
-        const prePx = (nodes[id] && nodes[id].px != null) ? nodes[id].px : null;
+        const prePx = nodes[id]?.px ?? null;
+        const isCollapsing = !new Set(cfg.collapsedIds || []).has(id);
 
         const set = new Set(cfg.collapsedIds || []);
         if (set.has(id)) {
@@ -1909,13 +1910,51 @@
             if (desc.has(selId)) selId = id;
         }
         cfg.collapsedIds = [...set];
-        renderAll();   // 内部 layout() 会重算 px
 
-        // 让被操作节点停在原屏幕位置，周围节点自然重排
-        if (prePx != null && nodes[id] && Math.abs(prePx - nodes[id].px) > 0.5) {
-            view.tx += (prePx - nodes[id].px) * view.s;
-            applyView();
-        }
+        let _delta = 0;
+        _animateLayoutTransition(() => {
+            // 折叠时：renderAll 会清空 gNodes，先捕获将消失的子节点 DOM 元素
+            const ghostEls = {};
+            if (isCollapsing) {
+                descendants(id).forEach(nid => {
+                    const el = gNodes.querySelector(`[data-id="${nid}"]`);
+                    if (el) ghostEls[nid] = el;
+                });
+            }
+
+            renderAll();
+
+            // 平移所有节点使锚点 SVG 位置不变，动画中锚点 sx==ex → 屏幕静止
+            if (prePx != null && nodes[id]) {
+                _delta = prePx - nodes[id].px;
+                if (Math.abs(_delta) > 0.5)
+                    for (const nid in nodes) {
+                        if (nodes[nid]) nodes[nid].px += _delta;
+                    }
+            }
+
+            // 折叠时：将幽灵节点重附到 DOM，目标位置设为锚点，实现聚合动画
+            if (isCollapsing) {
+                const tpx = nodes[id]?.px ?? prePx ?? 0;
+                const tpy = (nodes[id]?.py ?? 0) + (nodes[id]?.h ?? 50) + 10;
+                for (const nid in ghostEls) {
+                    if (nodes[nid]) {
+                        nodes[nid].px = tpx;
+                        nodes[nid].py = tpy;
+                    }
+                    ghostEls[nid].style.pointerEvents = 'none';
+                    ghostEls[nid].dataset.ghostFadeOut = '1';
+                    gNodes.appendChild(ghostEls[nid]);
+                }
+            }
+        }, 200, () => {
+            // 动画结束：修正 view.tx，重绘（同时清除幽灵节点）
+            if (Math.abs(_delta) > 0.5) {
+                view.tx += _delta * view.s;
+                applyView();
+            }
+            if (isCollapsing || Math.abs(_delta) > 0.5) renderTree();
+        });
     }
 
     // 返回当前可见节点集合（折叠节点的后代均不可见）
@@ -2985,33 +3024,64 @@
         // dragEdgeEl 在此之后才创建，无需挂回
     }
 
-    // 通用布局过渡动画：捕获旧位置 → 执行重建 → 从旧位置缓动到新位置
-    function _animateLayoutTransition(doRender, duration) {
+    // 通用布局过渡动画：捕获旧位置 → 执行重建 → 节点缓动到新位置
+    // onComplete 在动画结束（或无需动画）后调用，用于修正 view.tx 等后续状态
+    function _animateLayoutTransition(doRender, duration, onComplete) {
         if (_layoutAnimFrame) {
             cancelAnimationFrame(_layoutAnimFrame);
             _layoutAnimFrame = 0;
         }
         duration = duration || 200;
 
-        // 1. 记录当前所有节点的 DOM 位置
+        // 1. 记录旧 DOM 位置
         const oldPos = {};
         gNodes.querySelectorAll('[data-id]').forEach(g => {
             const m = (g.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
             if (m) oldPos[g.dataset.id] = {px: parseFloat(m[1]), py: parseFloat(m[2])};
         });
 
-        // 2. 重建 DOM（含新布局）
+        // 2. 重建 DOM（doRender 内可修改 nodes[].px 以平移锚点）
         doRender();
 
-        // 3. 收集需要动画的节点（新旧 DOM 都存在）
+        // 3. 已存在节点：old → new；data-ghost-fade-out 标记的节点原地/向锚点淡出
         const animData = {};
         gNodes.querySelectorAll('[data-id]').forEach(g => {
             const nid = g.dataset.id;
-            if (!oldPos[nid] || !nodes[nid]) return;
-            animData[nid] = {g, sx: oldPos[nid].px, sy: oldPos[nid].py, ex: nodes[nid].px, ey: nodes[nid].py};
+            if (!oldPos[nid]) return;
+            const isFadeOut = !!g.dataset.ghostFadeOut;
+            if (nodes[nid]) {
+                animData[nid] = {
+                    g, sx: oldPos[nid].px, sy: oldPos[nid].py,
+                    ex: nodes[nid].px, ey: nodes[nid].py, so: 1, eo: isFadeOut ? 0 : 1
+                };
+            } else if (isFadeOut) {
+                // 已删除节点：位置不变，仅淡出
+                animData[nid] = {
+                    g, sx: oldPos[nid].px, sy: oldPos[nid].py,
+                    ex: oldPos[nid].px, ey: oldPos[nid].py, so: 1, eo: 0
+                };
+            }
         });
 
-        // 4. 把节点瞬间打回旧位置，并同步重绘边
+        // 4. 展开新出现的节点：从最近可见祖先底部喷出 + 淡入
+        gNodes.querySelectorAll('[data-id]').forEach(g => {
+            const nid = g.dataset.id;
+            if (animData[nid] || !nodes[nid]) return;
+            let anc = nodes[nid].parent;
+            while (anc && !oldPos[anc]) anc = nodes[anc]?.parent;
+            if (anc && oldPos[anc]) {
+                animData[nid] = {
+                    g,
+                    sx: oldPos[anc].px,
+                    sy: oldPos[anc].py + (nodes[anc]?.h || 50) + 10,
+                    ex: nodes[nid].px,
+                    ey: nodes[nid].py,
+                    so: 0, eo: 1
+                };
+            }
+        });
+
+        // 5. 边重绘辅助
         const drawEdges = (posMap) => {
             gEdges.innerHTML = '';
             const nw = getNW();
@@ -3038,18 +3108,23 @@
             }
         };
 
+        // 6. 打回旧位置，设初始不透明度
         const startPos = {};
         for (const nid in animData) {
             const d = animData[nid];
             d.g.setAttribute('transform', `translate(${d.sx},${d.sy})`);
+            d.g.style.opacity = d.so;
             startPos[nid] = {px: d.sx, py: d.sy};
         }
         drawEdges(startPos);
 
-        // 无位移时直接返回
-        if (!Object.values(animData).some(d => Math.abs(d.ex - d.sx) > 0.5 || Math.abs(d.ey - d.sy) > 0.5)) return;
+        if (!Object.values(animData).some(d =>
+            Math.abs(d.ex - d.sx) > 0.5 || Math.abs(d.ey - d.sy) > 0.5 || Math.abs(d.eo - d.so) > 0.01)) {
+            if (onComplete) onComplete();
+            return;
+        }
 
-        // 5. rAF 缓动
+        // 7. rAF 缓动（位置 + 不透明度同步）
         const t0 = performance.now();
         (function step(now) {
             const t = Math.min(1, (now - t0) / duration);
@@ -3060,10 +3135,15 @@
                 const px = d.sx + (d.ex - d.sx) * ease, py = d.sy + (d.ey - d.sy) * ease;
                 curPos[nid] = {px, py};
                 d.g.setAttribute('transform', `translate(${px},${py})`);
+                if (d.so !== d.eo) d.g.style.opacity = d.so + (d.eo - d.so) * ease;
             }
             drawEdges(curPos);
-            if (t < 1) _layoutAnimFrame = requestAnimationFrame(step);
-            else _layoutAnimFrame = 0;
+            if (t < 1) {
+                _layoutAnimFrame = requestAnimationFrame(step);
+            } else {
+                _layoutAnimFrame = 0;
+                if (onComplete) onComplete();
+            }
         })(performance.now());
     }
 
@@ -3591,8 +3671,43 @@ Rules (strict):
         showDialog({
             title: '删除子树', msg: '删除该节点及其所有子分支？此操作不可撤销。',
             danger: true, onOk: () => {
+                const par = nodes[id].parent;
+                const anchorPx = nodes[par]?.px ?? null;
+                const killIds = [id, ...descendants(id)];
                 deleteSubtree(id);
-                renderAll();
+                let _delta = 0;
+                _animateLayoutTransition(() => {
+                    // 在 renderAll 前捕获被删节点的 DOM 元素
+                    const ghostEls = [];
+                    killIds.forEach(nid => {
+                        const g = gNodes.querySelector(`[data-id="${nid}"]`);
+                        if (g) ghostEls.push(g);
+                    });
+
+                    renderAll();
+
+                    // 平移所有节点使父节点 SVG 位置不变，动画中父节点屏幕静止
+                    if (anchorPx != null && nodes[par]) {
+                        _delta = anchorPx - nodes[par].px;
+                        if (Math.abs(_delta) > 0.5)
+                            for (const nid in nodes) {
+                                if (nodes[nid]) nodes[nid].px += _delta;
+                            }
+                    }
+
+                    // 重附幽灵节点，原地淡出
+                    ghostEls.forEach(g => {
+                        g.style.pointerEvents = 'none';
+                        g.dataset.ghostFadeOut = '1';
+                        gNodes.appendChild(g);
+                    });
+                }, 200, () => {
+                    if (Math.abs(_delta) > 0.5) {
+                        view.tx += _delta * view.s;
+                        applyView();
+                    }
+                    renderTree();
+                });
             }
         });
     }
