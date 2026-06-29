@@ -229,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
             self._sse_write("data: " + json.dumps(msg, ensure_ascii=False) + "\n\n")
             return
         except Exception as e:
-            return self._send(502, {"error": "无法连接 DeepSeek: %s" % e})
+            return self._send(502, {"error": "无法连接 %s: %s" % (provider, e)})
 
         # 成功：把上游 SSE 字节流原样转发给浏览器
         self.send_response(200)

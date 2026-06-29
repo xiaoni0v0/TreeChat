@@ -3216,6 +3216,7 @@ Rules (strict):
         if (node.pending || activeStreams.has(node.id)) return;
         node.pending = true;
         node.completed = false;
+        node.reasoning = "";  // 旧思考已失效，续写时模型会重新推理
         selId = node.id;
         renderAll();
         toggleSending(true);
