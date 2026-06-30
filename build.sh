@@ -12,7 +12,7 @@ if [ -n "$TREECHAT_VERSION" ]; then
 elif tag=$(git describe --tags --exact-match HEAD 2>/dev/null); then
     echo "$tag" > VERSION
 elif commit=$(git rev-parse --short HEAD 2>/dev/null); then
-    echo "@ $commit" > VERSION
+    echo "$commit" > VERSION
 else
     echo "unknown" > VERSION
 fi

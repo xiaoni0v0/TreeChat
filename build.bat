@@ -16,7 +16,7 @@ if defined TREECHAT_VERSION (
     ) else (
         for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set GIT_HASH=%%i
         if defined GIT_HASH (
-            echo @ %GIT_HASH%> VERSION
+            echo %GIT_HASH%> VERSION
         ) else (
             echo unknown> VERSION
         )
