@@ -1765,7 +1765,6 @@
     let uidc = 0;
     const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
 
-
     // ---- IndexedDB 附件持久化（绕过 localStorage 5MB 限制）----
     const IDB_NAME = "treechat", IDB_VER = 2, IDB_STORE = "attachments";
     let _idb = null;
@@ -2698,7 +2697,7 @@
             const newW = Math.max(minW, Math.min(maxW, divDrag.w + (e.clientX - divDrag.x)));
             cfg.divRatio = newW / (document.querySelector("main").offsetWidth || window.innerWidth);
             treeWrapEl.style.flex = "none";
-            treeWrapEl.style.width = newW + "px";
+            treeWrapEl.style.width = (cfg.divRatio * 100) + "%";
         }
     });
     window.addEventListener("beforeunload", () => save());
@@ -4228,10 +4227,8 @@ Rules (strict):
    页面加载时恢复保存的分割条比例（仅桌面端、且用户曾自定义过）
    ========================================================= */
     if (cfg.divRatio != null && window.innerWidth > 768) {
-        const mainW = document.querySelector("main").offsetWidth;
-        const newW = Math.round(Math.max(180, Math.min(mainW - 340, cfg.divRatio * mainW)));
         treeWrapEl.style.flex = "none";
-        treeWrapEl.style.width = newW + "px";
+        treeWrapEl.style.width = (cfg.divRatio * 100) + "%";
     }
 
     /* =========================================================
@@ -4245,11 +4242,8 @@ Rules (strict):
                 const sEl = document.getElementById("side");
                 sEl.style.display = "";
                 treeWrapEl.classList.remove("m-show");
-                // 按保存的比例恢复分割条
-                const mainW = document.querySelector("main").offsetWidth;
-                const newW = Math.round(Math.max(180, Math.min(mainW - 340, cfg.divRatio * mainW)));
                 treeWrapEl.style.flex = "none";
-                treeWrapEl.style.width = newW + "px";
+                treeWrapEl.style.width = (cfg.divRatio * 100) + "%";
             }
             wasMobile = isMobile;
         });
