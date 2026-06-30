@@ -71,6 +71,11 @@
             cursor: pointer
         }
 
+        /* 顶栏按钮图标：默认隐藏，移动端 CSS 中反转 */
+        .btn-icon {
+            display: none
+        }
+
         /* ---------- top bar ---------- */
         header {
             height: 52px;
@@ -86,6 +91,15 @@
         /* 允许 header 内每个 flex 子项收缩到 0，防止顶栏内容宽度被浏览器用来撑宽页面最小宽度 */
         header > * {
             min-width: 0
+        }
+
+        .send-row > *, .toolbar > * {
+            min-width: 0
+        }
+
+        .send-row .btn-text {
+            font-size: clamp(10px, 1.5vw, 13px);
+            white-space: nowrap
         }
 
         .logo {
@@ -236,11 +250,17 @@
             right: 12px;
             top: 12px;
             display: flex;
-            gap: 6px
+            gap: 6px;
+            max-width: calc(100% - 24px)
         }
 
         .toolbar .btn {
-            padding: 6px 9px
+            padding: 0.3em 0.5em;
+            font-size: clamp(11px, 1.8vw, 14px);
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center
         }
 
         #side {
@@ -621,7 +641,8 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
-            background: var(--panel2)
+            background: var(--panel2);
+            min-width: 0
         }
 
         .composer .row {
@@ -1179,16 +1200,29 @@
         }
 
         @media (max-width: 768px) {
-            /* 顶栏：压缩间距让所有按钮都能显示 */
+            /* 顶栏：图标模式，压缩到最小 */
             header {
                 height: 40px;
-                gap: 3px;
+                gap: 4px;
                 padding: 0 6px
             }
 
             header .btn.ghost {
-                padding: 3px 7px;
-                font-size: 12px
+                padding: 5px 8px;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center
+            }
+
+            header .btn-text {
+                display: none
+            }
+
+            header .btn-icon {
+                display: block;
+                width: 16px;
+                height: 16px
             }
 
             header .logo {
@@ -1196,7 +1230,7 @@
             }
 
             #keyPill {
-                font-size: 11px;
+                font-size: clamp(10px, 1.5vw, 13px);
                 padding: 3px 8px
             }
 
@@ -1263,8 +1297,50 @@
             }
 
             .send-row {
-                gap: 3px;
-                flex-wrap: wrap
+                gap: 2px;
+                flex-wrap: nowrap
+            }
+
+
+            .send-row .btn-text, .toolbar .btn-text {
+                display: none
+            }
+
+            .send-row .btn-icon, .toolbar .btn-icon {
+                display: block;
+                width: 14px;
+                height: 14px
+            }
+
+            .send-row .copy-done-icon {
+                display: none
+            }
+
+            .send-row .btn.done .copy-default-icon {
+                display: none
+            }
+
+            .send-row .btn.done .copy-done-icon {
+                display: block;
+                width: 14px;
+                height: 14px;
+                stroke: var(--ok)
+            }
+
+            .send-row .btn {
+                min-height: 28px;
+                padding: 2px 5px !important;
+                display: flex;
+                align-items: center;
+                justify-content: center
+            }
+
+            .send-row .btn[style*="display:none"], .send-row .btn[style*="display: none"] {
+                display: none
+            }
+
+            .toolbar .btn {
+                min-width: 0
             }
 
             /* 触摸目标 ≥32px */
@@ -1473,13 +1549,38 @@
 <body>
 <header>
     <div class="logo"><span class="dot"></span> TreeChat</div>
-    <span class="pill" id="keyPill" title="点击打开设置"><span class="ind"></span><span
+    <span class="pill" id="keyPill" title="点击打开设置"
+          style="font-size:clamp(10px,1.5vw,13px);white-space:nowrap"><span class="ind"></span><span
             id="keyTxt">未设置 key</span></span>
     <div class="spacer"></div>
-    <button class="btn ghost" id="exportBtn">导出</button>
-    <button class="btn ghost" id="importBtn">导入</button>
-    <button class="btn ghost" id="resetBtn">清空</button>
-    <button class="btn ghost" id="settingsBtn">设置</button>
+    <button class="btn ghost" id="exportBtn" title="导出">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 9V3M5 5.5l3-3 3 3M3 12h10"/>
+        </svg>
+        <span class="btn-text">导出</span>
+    </button>
+    <button class="btn ghost" id="importBtn" title="导入">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3v6M5 6.5l3 3 3-3M3 12h10"/>
+        </svg>
+        <span class="btn-text">导入</span>
+    </button>
+    <button class="btn ghost danger" id="resetBtn" title="清空">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5l.5-8M7 8v3M9 8v3"/>
+        </svg>
+        <span class="btn-text">清空</span>
+    </button>
+    <button class="btn ghost" id="settingsBtn" title="设置">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="currentColor" stroke="none">
+            <path fill-rule="evenodd"
+                  d="M6.6 3.7L6.5 1.1L9.5 1.1L9.4 3.7L11 4.7L13.2 3.3L14.7 5.8L12.4 7.1L12.4 8.9L14.7 10.2L13.2 12.7L11 11.3L9.4 12.3L9.5 14.9L6.5 14.9L6.6 12.3L5 11.3L2.8 12.7L1.3 10.2L3.6 8.9L3.6 7.1L1.3 5.8L2.8 3.3L5 4.7ZM10.5 8A2.5 2.5 0 1 0 5.5 8 2.5 2.5 0 1 0 10.5 8Z"/>
+        </svg>
+        <span class="btn-text">设置</span>
+    </button>
 </header>
 
 <main>
@@ -1491,9 +1592,19 @@
             </g>
         </svg>
         <div class="toolbar">
-            <button class="btn" id="fitBtn" title="居中适配">⤢ 适配</button>
-            <button class="btn" id="zoomIn">＋</button>
-            <button class="btn" id="zoomOut">－</button>
+            <button class="btn" id="fitBtn" title="居中适配">
+                <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/>
+                </svg>
+                <span class="btn-text">适配</span>
+            </button>
+            <button class="btn" id="zoomIn">
+                <span class="btn-text">＋</span>
+            </button>
+            <button class="btn" id="zoomOut">
+                <span class="btn-text">－</span>
+            </button>
         </div>
         <div class="hint">点击节点选中 · 拖拽空白处平移 · 滚轮缩放 · 右侧输入从选中节点拉新分支 · ▼ 折叠子节点</div>
     </div>
@@ -1509,30 +1620,63 @@
             <textarea id="input" placeholder="输入消息，Enter 发送 / Shift+Enter 换行 …"></textarea>
             <div id="attachPreview" class="attach-preview" style="display:none"></div>
             <div class="send-row">
-                <span style="color:var(--muted);font-size:12px">深度&nbsp;<b id="depthInfo"
-                                                                             style="color:var(--text)">0</b></span>
-                <button class="btn ghost" id="pivotBtn" style="padding:4px 9px;font-size:12px"
-                        title="将根 → 当前节点路径设为主线（垂直排列）">主线
-                </button>
+                <span style="color:var(--muted);font-size:clamp(10px,1.5vw,13px);white-space:nowrap">深度&nbsp;<b
+                        id="depthInfo"
+                        style="color:var(--text)">0</b></span>
                 <button class="btn ghost" id="copyPathBtn" style="padding:4px 9px;font-size:12px"
-                        title="复制根 → 当前节点整条路径（Markdown 原文）">复制
+                        title="复制根 → 当前节点整条路径（Markdown 原文）">
+                    <svg class="btn-icon copy-default-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                         stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="5.5" y="3.5" width="7" height="9" rx="1.5"/>
+                        <path d="M3.5 5.5v7.5c0 .6.4 1 1 1H10"/>
+                    </svg>
+                    <svg class="btn-icon copy-done-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2.5 8.5l3.5 3.5L13 4.5"/>
+                    </svg>
+                    <span class="btn-text">复制</span>
                 </button>
-                <button class="btn ghost" id="delBtn" style="padding:4px 9px;font-size:12px">删除</button>
+                <button class="btn ghost danger" id="delBtn" style="padding:4px 9px;font-size:12px">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="4" cy="4.5" r="1.8"/>
+                        <circle cx="4" cy="11.5" r="1.8"/>
+                        <path d="M5.6 5.4L13 12M5.6 10.6L13 3.5"/>
+                    </svg>
+                    <span class="btn-text">删除</span>
+                </button>
                 <span class="spacer"></span>
                 <button class="btn ghost" id="thinkBtn" title="开启思考模式"
-                        style="display:none;padding:4px 9px;font-size:12px">思考
+                        style="display:none;padding:4px 9px;font-size:12px">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 1.5a3.5 3.5 0 00-1 6.8V11a.8.8 0 001.6 0V8.3A3.5 3.5 0 008 1.5z"/>
+                        <path d="M8 13h.01"/>
+                    </svg>
+                    <span class="btn-text">思考</span>
                 </button>
                 <button class="btn ghost" id="attachBtn" title="附加图片（或直接粘贴）" style="padding:4px 8px">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" style="display:block">
-                        <rect x="3" y="3" width="18" height="18" rx="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1.5" y="3.5" width="13" height="10" rx="1.5"/>
+                        <circle cx="5" cy="6.5" r="1.2"/>
+                        <path d="M1.5 12l4-3.5 3 2.5L13 6.5v7"/>
                     </svg>
                 </button>
                 <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
-                <button class="btn" id="stopBtn" style="display:none">停止</button>
-                <button class="btn primary" id="sendBtn">发送 ↵</button>
+                <button class="btn" id="stopBtn" style="display:none">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="currentColor" stroke="none">
+                        <rect x="4" y="4" width="8" height="8" rx="1"/>
+                    </svg>
+                    <span class="btn-text">停止</span>
+                </button>
+                <button class="btn primary" id="sendBtn">
+                    <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1.5 3L14.5 8L1.5 13L4 8ZM4 8h6"/>
+                    </svg>
+                    <span class="btn-text">发送 ↵</span>
+                </button>
             </div>
         </div>
     </div>
@@ -2466,7 +2610,7 @@
     }
 
     function flashBtn(btn, msg) {
-        const t = btn.querySelector(".t") || btn;
+        const t = btn.querySelector(".t") || btn.querySelector(".btn-text") || btn;
         if (!btn.dataset.label) btn.dataset.label = t.textContent;
         t.textContent = msg;
         btn.classList.add("done");
@@ -3656,8 +3800,8 @@ Rules (strict):
     }
 
     function toggleSending(on) {
-        document.getElementById("sendBtn").style.display = on ? "none" : "inline-block";
-        document.getElementById("stopBtn").style.display = on ? "inline-block" : "none";
+        document.getElementById("sendBtn").style.display = on ? "none" : "";
+        document.getElementById("stopBtn").style.display = on ? "" : "none";
     }
 
     document.getElementById("stopBtn").onclick = () => {
@@ -3691,7 +3835,7 @@ Rules (strict):
     function updateThinkBtn() {
         const btn = document.getElementById("thinkBtn");
         const supported = !!THINKING_EXTRA[cfg.model];
-        btn.style.display = supported ? "inline-block" : "none";
+        btn.style.display = supported ? "" : "none";
         if (!supported) cfg.thinking = false;
         btn.classList.toggle("active", cfg.thinking);
         btn.title = (cfg.thinking ? "关闭" : "开启") + "思考模式";
@@ -4186,8 +4330,6 @@ Rules (strict):
         save();
         _animateLayoutTransition(() => renderAll());
     }
-
-    document.getElementById("pivotBtn").onclick = () => setPivot(selId);
 
     document.getElementById("ctx-fold").onclick = () => {
         const id = ctxTargetId;
