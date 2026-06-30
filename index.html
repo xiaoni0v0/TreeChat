@@ -2162,6 +2162,7 @@
     const gEdges = document.getElementById("edges");
     const gNodes = document.getElementById("nodes");
     const ZOOM_MIN = 0.3, ZOOM_MAX = 2.2;
+    const PAN_SPEED = 1.5; // 画布平移加速比：canvas px / cursor px（节点拖拽保持 1:1）
     let view = {tx: 60, ty: 40, s: 1};
 
     function applyView() {
@@ -2689,8 +2690,8 @@
             }
         }
         if (pan) {
-            view.tx = pan.tx + (e.clientX - pan.x);
-            view.ty = pan.ty + (e.clientY - pan.y);
+            view.tx = pan.tx + (e.clientX - pan.x) * PAN_SPEED;
+            view.ty = pan.ty + (e.clientY - pan.y) * PAN_SPEED;
             applyView();
         }
         if (divDrag) {
@@ -2814,8 +2815,8 @@
                     lpTimer = null;
                 }
                 e.preventDefault();
-                view.tx = tPan.tx + (e.touches[0].clientX - tPan.x);
-                view.ty = tPan.ty + (e.touches[0].clientY - tPan.y);
+                view.tx = tPan.tx + (e.touches[0].clientX - tPan.x) * PAN_SPEED;
+                view.ty = tPan.ty + (e.touches[0].clientY - tPan.y) * PAN_SPEED;
                 applyView();
             } else if (e.touches.length >= 2 && tPinch) {
                 e.preventDefault();
