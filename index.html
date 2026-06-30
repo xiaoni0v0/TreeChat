@@ -1762,7 +1762,7 @@
         });
     }
 
-    let nodes = {}, rootId = "root", selId = "root", pivotId = null;
+    let nodes = {}, rootId = "root", selId = "root", pivotId = "root";
     let uidc = 0;
     const uid = () => "n" + (Date.now().toString(36)) + (uidc++).toString(36);
 
@@ -1858,7 +1858,7 @@
         nodes[rootId] = {id: rootId, parent: null, user: null, reply: "", reasoning: "", children: [], pending: false};
         _clearAtts();  // fire-and-forget: 清空 IndexedDB
         selId = rootId;
-        pivotId = null;
+        pivotId = rootId;
     }
 
     function save() {
@@ -1892,7 +1892,7 @@
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
-                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : null;
+                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : rootId;
                 if (d.view) {
                     Object.assign(view, d.view);
                     view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
@@ -1968,7 +1968,7 @@
         nodes[par].children = nodes[par].children.filter(c => c !== id);
         kill.forEach(k => delete nodes[k]);
         cfg.collapsedIds = (cfg.collapsedIds || []).filter(x => !kill.includes(x));
-        if (kill.includes(pivotId)) pivotId = null;
+        if (kill.includes(pivotId)) pivotId = par;
         _delAtts(kill);  // fire-and-forget: 清理 IndexedDB 附件
         selId = par;
     }
@@ -2121,7 +2121,7 @@
 
         // 主线：为路径上每个节点记录"哪个子节点是主路径上的下一节点"
         const mainPathNext = {};
-        if (pivotId && pivotId !== rootId && nodes[pivotId]) {
+        if (pivotId !== rootId && nodes[pivotId]) {
             let cur = pivotId;
             while (nodes[cur] && nodes[cur].parent) {
                 const par = nodes[cur].parent;
@@ -2870,7 +2870,7 @@
 
     function _dragActivate() {
         // 禁止拖拽主路径上的节点（主路径靠 _animateLayoutTransition 保持竖直，不可乱序）
-        if (pivotId && pivotId !== rootId && nodes[pivotId]) {
+        if (pivotId !== rootId && nodes[pivotId]) {
             let _c = pivotId;
             while (_c && nodes[_c]) {
                 if (_c === nodeDrag.id) {
@@ -4018,7 +4018,7 @@ Rules (strict):
                 nodes = d.nodes;
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
-                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : null;
+                pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : rootId;
                 if (d.view) {
                     Object.assign(view, d.view);
                     view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
@@ -4166,7 +4166,7 @@ Rules (strict):
     });
 
     function setPivot(id) {
-        pivotId = (id === rootId) ? null : id;
+        pivotId = id;
         save();
         _animateLayoutTransition(() => renderAll());
     }
