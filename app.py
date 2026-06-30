@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
 TreeChat - 树状 AI 对话
 -----------------------
@@ -13,16 +14,67 @@ TreeChat - 树状 AI 对话
   2) 浏览器自动打开 http://127.0.0.1:8000，首次使用在设置里填写 API Key
 """
 
-import os
-import sys
+import argparse
+import gzip
 import json
+import os
+import socket
+import sys
 import threading
-import webbrowser
-import urllib.request
+import time
 import urllib.error
+import urllib.request
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+
+DO_NOT_MASK_KEY = True
+
+
+# ---------- 日志 ----------
+class _Logger:
+    def __init__(self, log_dir, enabled_file):
+        self._enabled_file = enabled_file
+        self._f = None
+        if enabled_file:
+            os.makedirs(log_dir, exist_ok=True)
+            latest = os.path.join(log_dir, "latest.log")
+            if os.path.exists(latest):
+                today = time.strftime("%Y-%m-%d")
+                n = 1
+                while True:
+                    arc = os.path.join(log_dir, "%s-%d.log.gz" % (today, n))
+                    if not os.path.exists(arc):
+                        break
+                    n += 1
+                with open(latest, "rb") as fin:
+                    with gzip.open(arc, "wb") as fout:
+                        fout.writelines(fin)
+                os.remove(latest)
+            self._f = open(latest, "a", encoding="utf-8")
+
+    def write(self, msg, screen=None):
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        scr = "[%s] %s" % (ts, screen if screen is not None else msg)
+        sys.stderr.write(scr + "\n")
+        if self._f:
+            self._f.write("[%s] %s\n" % (ts, msg))
+            self._f.flush()
+
+    def close(self):
+        if self._f:
+            self._f.close()
+
+
+def _mask_key(k):
+    if DO_NOT_MASK_KEY:
+        return k
+
+    if not k or len(k) < 8:
+        return "***"
+    return k[:4] + "..." + k[-4:]
+
 
 PROVIDERS = {
     "deepseek": "https://api.deepseek.com/chat/completions",
@@ -43,9 +95,16 @@ def read_index():
 
 
 class Handler(BaseHTTPRequestHandler):
-    # 安静一点的日志
+    def __init__(self, logger, *args, **kwargs):
+        self._logger = logger
+        super().__init__(*args, **kwargs)
+
     def log_message(self, fmt, *args):
-        sys.stderr.write("[%s] %s\n" % (self.address_string(), fmt % args))
+        pass  # 由 _log_request 统一处理
+
+    def _log(self, msg, screen=None):
+        self._logger.write("[%s] %s" % (self.address_string(), msg),
+                           "[%s] %s" % (self.address_string(), screen) if screen is not None else None)
 
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         if isinstance(body, (dict, list)):
@@ -128,12 +187,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send(400, {"error": str(e)})
         provider = (data.get("provider", "")).strip()
+        api_key = (data.get("key", "")).strip()
+        model = (data.get("model", "")).strip()
+
+        # 日志
+        self._log("POST /api/test-key  provider=%s  model=%s  key=%s" % (provider, model, _mask_key(api_key)))
+
         if provider not in PROVIDERS:
             return self._send(400, {"error": "缺少或未知的提供商"})
-        api_key = (data.get("key", "")).strip()
         if not api_key:
             return self._send(400, {"error": "Key 未设置"})
-        model = (data.get("model", "")).strip()
         payload = json.dumps(
             {
                 "model": model,
@@ -174,12 +237,29 @@ class Handler(BaseHTTPRequestHandler):
         provider = (data.get("provider", "")).strip()
         if provider not in PROVIDERS:
             return self._send(400, {"error": "缺少或未知的提供商"})
-        # key 由前端每次请求携带
         api_key = (data.get("key", "")).strip()
         if not api_key:
             return self._send(
                 401, {"error": "未设置 %s 的 API key，请在设置中填写。" % provider}
             )
+
+        # 日志：屏幕截断对话预览，文件记录完整对话
+        msgs = data.get("messages", [])
+        last_user = ""
+        for m in reversed(msgs):
+            if isinstance(m, dict) and m.get("role") == "user":
+                c = m.get("content", "")
+                last_user = (c if isinstance(c, str) else str(c))
+                break
+        preview = last_user[:80] + ("..." if len(last_user) > 80 else "") if last_user else "(无对话)"
+        self._log(
+            "POST /api/chat  provider=%s  model=%s  key=%s  messages=%s" % (
+                provider, data.get("model", "?"), _mask_key(api_key), json.dumps(msgs, ensure_ascii=False)
+            ),
+            "POST /api/chat  provider=%s  model=%s  key=%s  msgs=%d  preview=%s" % (
+                provider, data.get("model", "?"), _mask_key(api_key), len(msgs), preview
+            )
+        )
 
         # 透传前端 payload，去掉仅供路由用的字段
         payload = {k: v for k, v in data.items() if k not in ("provider", "key")}
@@ -257,9 +337,6 @@ def _safe_json(s):
 
 
 def main():
-    import socket
-    import argparse
-
     parser = argparse.ArgumentParser(description="TreeChat local server")
     parser.add_argument(
         "--host", default="127.0.0.1", help="bind host (default: 127.0.0.1)"
@@ -270,7 +347,12 @@ def main():
     parser.add_argument(
         "--server",
         action="store_true",
-        help="shortcut for --host 0.0.0.0 (multi-user server mode)",
+        help="服务器模式：监听 0.0.0.0 并启用日志（logs/ 目录）",
+    )
+    parser.add_argument(
+        "--do-not-mask-key",
+        action="store_true",
+        help="不隐藏 API Key（仅用于调试）",
     )
     args = parser.parse_args()
 
@@ -289,7 +371,14 @@ def main():
     finally:
         probe.close()
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    # 初始化日志（server 模式写文件，否则仅屏幕）
+    _logger = _Logger(os.path.join(HERE, "logs"), enabled_file=args.server)
+
+    # 是否隐藏 API Key
+    global DO_NOT_MASK_KEY
+    DO_NOT_MASK_KEY = args.do_not_mask_key
+
+    server = ThreadingHTTPServer((host, port), lambda *_args, **_kwargs: Handler(_logger, *_args, **_kwargs))
     url = "http://127.0.0.1:%d" % port
 
     if host == "0.0.0.0":
@@ -313,6 +402,7 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nbye")
+        _logger.close()
         server.shutdown()
 
 
