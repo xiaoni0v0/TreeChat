@@ -34,7 +34,7 @@ HERE = (
     else os.path.dirname(os.path.abspath(__file__))
 )
 
-DO_NOT_MASK_KEY = True
+DO_NOT_MASK_KEY = False
 
 _VERSION_CACHE = None
 

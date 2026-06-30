@@ -22,7 +22,6 @@
             --ai: #26303f;
             --danger: #f85149;
             --ok: #3fb950;
-            --radius: 12px;
             --font: -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
             /* 主题专用变量 */
             --header-bg: linear-gradient(180deg, #171d27, #12161d);
@@ -44,10 +43,6 @@
             --ctx-shadow: 0 8px 28px rgba(0, 0, 0, .55);
             --drag-shadow: drop-shadow(0 6px 18px rgba(0, 0, 0, .55));
             --drop-overlay-bg: rgba(0, 0, 0, .5);
-        }
-
-        #tree {
-            background: var(--bg);
         }
 
         * {
@@ -223,6 +218,7 @@
         }
 
         #tree {
+            background: var(--bg);
             width: 100%;
             height: 100%;
             display: block;
@@ -1373,11 +1369,6 @@
                 grid-template-columns:repeat(3, 1fr)
             }
 
-            /* 通用对话框：居中小卡片 */
-            #dialogMask {
-                align-items: center
-            }
-
             #dialogMask .modal {
                 width: 92%;
                 border-radius: 14px
@@ -1600,9 +1591,15 @@
                 <span class="btn-text">适配</span>
             </button>
             <button class="btn" id="zoomIn">
+                <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 3.5v9M3.5 8h9"/>
+                </svg>
                 <span class="btn-text">＋</span>
             </button>
             <button class="btn" id="zoomOut">
+                <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3.5 8h9"/>
+                </svg>
                 <span class="btn-text">－</span>
             </button>
         </div>
@@ -2123,9 +2120,8 @@
     // 折叠/展开某节点的子分支：被操作节点在屏幕上不动，其他节点缓动
     // 折叠：子节点向锚点聚合后消失；展开：子节点从锚点喷出（_animateLayoutTransition step 4）
     function toggleCollapse(id) {
-        const isCollapsing = !new Set(cfg.collapsedIds || []).has(id);
-
         const set = new Set(cfg.collapsedIds || []);
+        const isCollapsing = !set.has(id);
         if (set.has(id)) {
             set.delete(id);
         } else {
@@ -2436,12 +2432,6 @@
             });
             gNodes.appendChild(g);
         }
-    }
-
-    function mkTitle(text) {
-        const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
-        t.textContent = text;
-        return t;
     }
 
     function renderConv() {
@@ -2764,14 +2754,6 @@
     }
 
     // 流式输出时用防抖触发 MathJax，避免每个 token 都排版
-    let _typesetTimer = null;
-
-    function typesetDebounced(elm, delay = 450) {
-        clearTimeout(_typesetTimer);
-        _typesetTimer = setTimeout(() => {
-            typeset(elm);
-        }, delay);
-    }
 
     function renderAll() {
         renderTree();
@@ -2918,7 +2900,7 @@
                             clientX: cx, clientY: cy, preventDefault: () => {
                             }
                         }, nid);
-                    }, 600);
+                    }, 500);
                 } else if (!e.target.closest(".tog-bg")) {
                     e.preventDefault();
                     const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
@@ -2932,7 +2914,7 @@
                             clientX: cx, clientY: cy, preventDefault: () => {
                             }
                         }, null);
-                    }, 600);
+                    }, 500);
                 }
             } else if (e.touches.length >= 2) {
                 e.preventDefault();
@@ -4140,7 +4122,7 @@ Rules (strict):
         const p = document.getElementById("keyPill"), t = document.getElementById("keyTxt");
         const has = !!keyStatus[cfg.provider];
         p.classList.toggle("ok", has);
-        t.textContent = has ? (PROV_DEFS[cfg.provider]?.label + " · 已就绪") : (PROV_DEFS[cfg.provider]?.label + " · 未设置 Key");
+        t.textContent = has ? (PROV_DEFS[cfg.provider]?.label) : (PROV_DEFS[cfg.provider]?.label);
     }
 
     // export / import
@@ -4365,15 +4347,7 @@ Rules (strict):
         }
         updateThinkBtn();
         renderAll();
-        // 有保存的摄像机位置时覆盖 fit() 默认结果
-        try {
-            const _sv = JSON.parse(localStorage.getItem(LS));
-            if (_sv && _sv.view) {
-                Object.assign(view, _sv.view);
-                applyView();
-            }
-        } catch (e) {
-        }
+        applyView();
         whenMathJax(() => typeset(document.getElementById("conv")));
         try {
             // key 只存前端，无需恢复到服务器
@@ -4448,17 +4422,11 @@ Rules (strict):
             tabTree.classList.add("active");
             tabChat.classList.remove("active");
             sideEl.style.display = "none";
+            const savedView = {...view};
             layout();
             fit();
-            // 恢复保存的摄像机位置（覆盖 fit 默认）
-            try {
-                const _sv = JSON.parse(localStorage.getItem(LS));
-                if (_sv && _sv.view) {
-                    Object.assign(view, _sv.view);
-                    applyView();
-                }
-            } catch (e) {
-            }
+            Object.assign(view, savedView);
+            applyView();
         }
 
         function goChat() {
