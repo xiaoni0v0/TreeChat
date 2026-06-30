@@ -1544,7 +1544,10 @@
 <!-- settings modal -->
 <div class="mask" id="settingsMask">
     <div class="modal">
-        <h3>设置</h3>
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <h3 style="margin:0 0 6px">设置</h3>
+            <span id="versionLabel" style="font-size:11px;color:var(--muted)"></span>
+        </div>
         <div class="stab-nav">
             <button class="stab active" data-stab="model">模型 &amp; API</button>
             <button class="stab" data-stab="conv">参数 &amp; 系统</button>
@@ -3840,6 +3843,10 @@ Rules (strict):
         renderPgrid();
         renderPdet();
         openModal("settingsMask");
+        fetch("/api/version").then(r => r.json()).then(d => {
+            document.getElementById("versionLabel").textContent = "版本：" + d.version;
+        }).catch(() => {
+        });
     }
 
     document.getElementById("settingsBtn").onclick = () => openSettings();

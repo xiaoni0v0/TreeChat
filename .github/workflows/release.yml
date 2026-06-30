@@ -43,6 +43,8 @@ jobs:
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
+        env:
+          TREECHAT_VERSION: ${{ inputs.version }}
         run: |
           chmod +x build.sh
           bash build.sh
@@ -50,6 +52,8 @@ jobs:
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
+        env:
+          TREECHAT_VERSION: ${{ inputs.version }}
         run: |
           .\build.bat
           ren dist\TreeChat.exe ${{ matrix.release-name }}

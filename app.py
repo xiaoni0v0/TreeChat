@@ -19,6 +19,7 @@ import gzip
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -34,6 +35,58 @@ HERE = (
 )
 
 DO_NOT_MASK_KEY = True
+
+_VERSION_CACHE = None
+
+
+def _get_version():
+    global _VERSION_CACHE
+    if _VERSION_CACHE is not None:
+        return _VERSION_CACHE
+    # 打包二进制：读捆绑的 VERSION 文件
+    if getattr(sys, "frozen", False):
+        vfile = os.path.join(HERE, "VERSION")
+        if os.path.isfile(vfile):
+            try:
+                _VERSION_CACHE = open(vfile, encoding="utf-8").read().strip()
+                return _VERSION_CACHE
+            except Exception:
+                pass
+        _VERSION_CACHE = "未知"
+        return _VERSION_CACHE
+    # 源码运行：先查 git tag，再查 commit hash
+    try:
+        tag = (
+            subprocess.check_output(
+                ["git", "describe", "--tags", "--exact-match", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                cwd=HERE,
+            )
+            .decode()
+            .strip()
+        )
+        if tag:
+            _VERSION_CACHE = tag
+            return _VERSION_CACHE
+    except Exception:
+        pass
+    try:
+        commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                cwd=HERE,
+            )
+            .decode()
+            .strip()
+        )
+        if commit:
+            _VERSION_CACHE = "@ " + commit
+            return _VERSION_CACHE
+    except Exception:
+        pass
+    _VERSION_CACHE = "未知"
+    return _VERSION_CACHE
 
 
 # ---------- 日志 ----------
@@ -143,6 +196,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": "index.html not found next to app.py"})
         elif self.path == "/api/status":
             self._send(200, {"ok": True})
+        elif self.path == "/api/version":
+            self._send(200, {"version": _get_version()})
         elif self.path.startswith("/lib/"):
             self._serve_static(self.path)
         else:
