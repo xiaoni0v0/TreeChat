@@ -1535,7 +1535,7 @@
         };
     </script>
     <script src="/lib/marked.min.js"></script>
-    <script src="/lib/mathjax-tex-svg.js" id="MathJax-script" async></script>
+    <script src="/lib/mathjax-tex-svg.js?v=3.2.2" id="MathJax-script" async></script>
 </head>
 <body>
 <header>
@@ -2744,12 +2744,17 @@
     function typeset(elm) {
         if (window.MathJax && MathJax.typeset) {
             try {
-                // 全量清除：清除上一次 typeset 残留的 math item，避免孤立 item 干扰新排版
                 MathJax.typesetClear && MathJax.typesetClear();
             } catch (e) {
             }
-            // 同步版 typeset：不走 whenReady，避免二次调用时内部 reset 与 typesetClear 冲突
-            MathJax.typeset([elm]);
+            try {
+                MathJax.typeset([elm]);
+            } catch (e) {
+                // \boldsymbol 等命令需要动态加载扩展，同步 typeset 会抛 "MathJax retry"
+                // 降级到异步版，它能正确等待扩展加载完成
+                MathJax.typesetPromise && MathJax.typesetPromise([elm]).catch(() => {
+                });
+            }
         }
     }
 
