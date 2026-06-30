@@ -3985,7 +3985,14 @@ Rules (strict):
 
     // export / import
     document.getElementById("exportBtn").onclick = () => {
-        const blob = new Blob([JSON.stringify({cfg, rootId, selId, nodes}, null, 2)], {type: "application/json"});
+        const blob = new Blob([JSON.stringify({
+            cfg,
+            rootId,
+            selId,
+            pivotId,
+            nodes,
+            view: {tx: view.tx, ty: view.ty, s: view.s}
+        }, null, 2)], {type: "application/json"});
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "treechat-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".json";
