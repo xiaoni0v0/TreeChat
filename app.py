@@ -40,20 +40,29 @@ _VERSION_CACHE = None
 
 
 def _get_version():
+    """返回 {"version": str, "type": "tag"|"commit"|"unknown"}"""
     global _VERSION_CACHE
     if _VERSION_CACHE is not None:
         return _VERSION_CACHE
-    # 打包二进制：读捆绑的 VERSION 文件
+
+    def _is_commit_hash(s):
+        return 7 <= len(s) <= 40 and all(c in "0123456789abcdef" for c in s.lower())
+
+    # 打包二进制：读捆绑的 VERSION 文件，按内容判断类型
     if getattr(sys, "frozen", False):
         vfile = os.path.join(HERE, "VERSION")
         if os.path.isfile(vfile):
             try:
-                _VERSION_CACHE = open(vfile, encoding="utf-8").read().strip()
-                return _VERSION_CACHE
+                v = open(vfile, encoding="utf-8").read().strip()
+                if v:
+                    t = "commit" if _is_commit_hash(v) else "tag"
+                    _VERSION_CACHE = {"version": v, "type": t}
+                    return _VERSION_CACHE
             except Exception:
                 pass
-        _VERSION_CACHE = "未知"
+        _VERSION_CACHE = {"version": "未知", "type": "unknown"}
         return _VERSION_CACHE
+
     # 源码运行：先查 git tag，再查 commit hash
     try:
         tag = (
@@ -66,7 +75,7 @@ def _get_version():
             .strip()
         )
         if tag:
-            _VERSION_CACHE = tag
+            _VERSION_CACHE = {"version": tag, "type": "tag"}
             return _VERSION_CACHE
     except Exception:
         pass
@@ -81,11 +90,11 @@ def _get_version():
             .strip()
         )
         if commit:
-            _VERSION_CACHE = "@ " + commit
+            _VERSION_CACHE = {"version": commit, "type": "commit"}
             return _VERSION_CACHE
     except Exception:
         pass
-    _VERSION_CACHE = "未知"
+    _VERSION_CACHE = {"version": "未知", "type": "unknown"}
     return _VERSION_CACHE
 
 
@@ -197,7 +206,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/status":
             self._send(200, {"ok": True})
         elif self.path == "/api/version":
-            self._send(200, {"version": _get_version()})
+            self._send(200, _get_version())
         elif self.path.startswith("/lib/"):
             self._serve_static(self.path)
         else:

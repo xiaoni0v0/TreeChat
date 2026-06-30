@@ -3970,7 +3970,15 @@ Rules (strict):
         renderPdet();
         openModal("settingsMask");
         fetch("/api/version").then(r => r.json()).then(d => {
-            document.getElementById("versionLabel").textContent = "版本：" + d.version;
+            const REPO = "https://github.com/xiaoni0v0/TreeChat";
+            const url = d.type === "tag" ? REPO + "/releases/tag/" + d.version
+                : d.type === "commit" ? REPO + "/commit/" + d.version
+                    : REPO;
+            const label = d.type === "commit" ? "@" + d.version : d.version;
+            document.getElementById("versionLabel").innerHTML =
+                '版本：<a href="' + url + '" target="_blank" rel="noopener noreferrer" '
+                + 'style="color:inherit;text-decoration:underline;text-underline-offset:2px">'
+                + label + '</a>';
         }).catch(() => {
         });
     }
