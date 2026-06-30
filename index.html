@@ -2861,7 +2861,8 @@
    ========================================================= */
     let nodeDrag = null;    // 当前拖拽状态
     let dragHappened = false; // 本次 mousedown 是否发生了真实拖拽
-    let _layoutAnimFrame = 0; // _animateLayoutTransition 当前 rAF 句柄（用于取消并发动画）
+    let _layoutAnimFrame = 0;       // _animateLayoutTransition 当前 rAF 句柄（用于取消并发动画）
+    let _layoutAnimOnComplete = null; // 被取消动画的 onComplete，取消时立即补偿执行
     let longPressHappened = false; // 移动端长按触发了菜单（阻止后续合成 click）
 
     function _dragActivate() {
@@ -3108,7 +3109,12 @@
         if (_layoutAnimFrame) {
             cancelAnimationFrame(_layoutAnimFrame);
             _layoutAnimFrame = 0;
+            if (_layoutAnimOnComplete) {
+                _layoutAnimOnComplete();
+                _layoutAnimOnComplete = null;
+            }
         }
+        _layoutAnimOnComplete = onComplete;
         duration = duration || 200;
 
         // 1. 记录旧 DOM 位置
@@ -3220,6 +3226,7 @@
                 _layoutAnimFrame = requestAnimationFrame(step);
             } else {
                 _layoutAnimFrame = 0;
+                _layoutAnimOnComplete = null;
                 if (onComplete) onComplete();
             }
         })(performance.now());
