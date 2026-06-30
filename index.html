@@ -2290,6 +2290,8 @@
     function renderConv() {
         const conv = document.getElementById("conv");
         const path = pathTo(selId);
+        const wasAtBottom = conv.scrollHeight - conv.scrollTop - conv.clientHeight < 80;
+        const savedScrollTop = conv.scrollTop;
         conv.innerHTML = "";
         if (cfg.system) {
             conv.appendChild(mkMsg("system", "SYSTEM", cfg.system));
@@ -2322,7 +2324,7 @@
             }
         });
         typeset(conv);
-        conv.scrollTop = conv.scrollHeight;
+        conv.scrollTop = wasAtBottom ? conv.scrollHeight : savedScrollTop;
 
         document.getElementById("crumbs").innerHTML =
             path.map((n, i) => i === 0 ? "<b>根</b>" : trunc(n.user, 12))
