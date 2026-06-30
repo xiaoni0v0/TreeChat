@@ -1976,7 +1976,6 @@
     // 折叠/展开某节点的子分支：被操作节点在屏幕上不动，其他节点缓动
     // 折叠：子节点向锚点聚合后消失；展开：子节点从锚点喷出（_animateLayoutTransition step 4）
     function toggleCollapse(id) {
-        const prePx = nodes[id]?.px ?? null;
         const isCollapsing = !new Set(cfg.collapsedIds || []).has(id);
 
         const set = new Set(cfg.collapsedIds || []);
@@ -1990,7 +1989,11 @@
         cfg.collapsedIds = [...set];
 
         let _delta = 0;
+        let _prePx = null; // doRender 内捕获，onComplete 用于现场算修正量
         _animateLayoutTransition(() => {
+            // prePx 在 doRender 内捕获：前一动画 onComplete 已执行，nodes[id].px 在自然位置
+            _prePx = nodes[id]?.px ?? null;
+
             // 折叠时：renderAll 会清空 gNodes，先捕获将消失的子节点 DOM 元素
             const ghostEls = {};
             if (isCollapsing) {
@@ -2003,8 +2006,8 @@
             renderAll();
 
             // 平移所有节点使锚点 SVG 位置不变，动画中锚点 sx==ex → 屏幕静止
-            if (prePx != null && nodes[id]) {
-                _delta = prePx - nodes[id].px;
+            if (_prePx != null && nodes[id]) {
+                _delta = _prePx - nodes[id].px;
                 if (Math.abs(_delta) > 0.5)
                     for (const nid in nodes) {
                         if (nodes[nid]) nodes[nid].px += _delta;
@@ -2013,7 +2016,7 @@
 
             // 折叠时：将幽灵节点重附到 DOM，目标位置设为锚点，实现聚合动画
             if (isCollapsing) {
-                const tpx = nodes[id]?.px ?? prePx ?? 0;
+                const tpx = nodes[id]?.px ?? _prePx ?? 0;
                 const tpy = (nodes[id]?.py ?? 0) + (nodes[id]?.h ?? 50) + 10;
                 for (const nid in ghostEls) {
                     if (nodes[nid]) {
@@ -2026,12 +2029,18 @@
                 }
             }
         }, 200, () => {
-            // 动画结束：修正 view.tx，重绘（同时清除幽灵节点）
-            if (Math.abs(_delta) > 0.5) {
-                view.tx += _delta * view.s;
-                applyView();
+            // 动画结束：先 renderTree() 让 nodes[id].px 落到当前状态的自然位置，
+            // 再用 _prePx - nodes[id].px 现场算修正量，而非依赖 _delta。
+            // 这样即使被抢占时 cfg.collapsedIds 已被新操作改变，修正量依然正确。
+            const txBefore = view.tx;
+            renderTree();
+            if (nodes[id] && _prePx != null) {
+                const correction = (_prePx - nodes[id].px) * view.s;
+                if (Math.abs(correction) > 0.5) {
+                    view.tx = txBefore + correction;
+                    applyView();
+                }
             }
-            if (isCollapsing || Math.abs(_delta) > 0.5) renderTree();
         });
     }
 
