@@ -27,7 +27,11 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-HERE = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+HERE = (
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.abspath(__file__))
+)
 
 DO_NOT_MASK_KEY = True
 
@@ -103,8 +107,10 @@ class Handler(BaseHTTPRequestHandler):
         pass  # 由 _log_request 统一处理
 
     def _log(self, msg, screen=None):
-        self._logger.write("[%s] %s" % (self.address_string(), msg),
-                           "[%s] %s" % (self.address_string(), screen) if screen is not None else None)
+        self._logger.write(
+            "[%s] %s" % (self.address_string(), msg),
+            "[%s] %s" % (self.address_string(), screen) if screen is not None else None,
+        )
 
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         if isinstance(body, (dict, list)):
@@ -191,7 +197,10 @@ class Handler(BaseHTTPRequestHandler):
         model = (data.get("model", "")).strip()
 
         # 日志
-        self._log("POST /api/test-key  provider=%s  model=%s  key=%s" % (provider, model, _mask_key(api_key)))
+        self._log(
+            "POST /api/test-key  provider=%s  model=%s  key=%s"
+            % (provider, model, _mask_key(api_key))
+        )
 
         if provider not in PROVIDERS:
             return self._send(400, {"error": "缺少或未知的提供商"})
@@ -249,16 +258,29 @@ class Handler(BaseHTTPRequestHandler):
         for m in reversed(msgs):
             if isinstance(m, dict) and m.get("role") == "user":
                 c = m.get("content", "")
-                last_user = (c if isinstance(c, str) else str(c))
+                last_user = c if isinstance(c, str) else str(c)
                 break
-        preview = last_user[:80] + ("..." if len(last_user) > 80 else "") if last_user else "(无对话)"
+        preview = (
+            last_user[:80] + ("..." if len(last_user) > 80 else "")
+            if last_user
+            else "(无对话)"
+        )
         self._log(
-            "POST /api/chat  provider=%s  model=%s  key=%s  messages=%s" % (
-                provider, data.get("model", "?"), _mask_key(api_key), json.dumps(msgs, ensure_ascii=False)
+            "POST /api/chat  provider=%s  model=%s  key=%s  messages=%s"
+            % (
+                provider,
+                data.get("model", "?"),
+                _mask_key(api_key),
+                json.dumps(msgs, ensure_ascii=False),
             ),
-            "POST /api/chat  provider=%s  model=%s  key=%s  msgs=%d  preview=%s" % (
-                provider, data.get("model", "?"), _mask_key(api_key), len(msgs), preview
-            )
+            "POST /api/chat  provider=%s  model=%s  key=%s  msgs=%d  preview=%s"
+            % (
+                provider,
+                data.get("model", "?"),
+                _mask_key(api_key),
+                len(msgs),
+                preview,
+            ),
         )
 
         # 透传前端 payload，去掉仅供路由用的字段
@@ -378,7 +400,9 @@ def main():
     global DO_NOT_MASK_KEY
     DO_NOT_MASK_KEY = args.do_not_mask_key
 
-    server = ThreadingHTTPServer((host, port), lambda *_args, **_kwargs: Handler(_logger, *_args, **_kwargs))
+    server = ThreadingHTTPServer(
+        (host, port), lambda *_args, **_kwargs: Handler(_logger, *_args, **_kwargs)
+    )
     url = "http://127.0.0.1:%d" % port
 
     if host == "0.0.0.0":
