@@ -928,7 +928,7 @@
         .tog-arrow {
             fill: var(--muted);
             pointer-events: none;
-            font-size: 9px;
+            font-size: 11px;
             text-anchor: middle
         }
 
@@ -2238,7 +2238,7 @@
             if (n.children.length > 0) {
                 const cx = nw / 2, cy = n.h + 1;
                 const tog = el("g", {"pointer-events": "all", transform: `translate(${cx},${cy})`});
-                const circ = el("circle", {r: 9, class: "tog-bg"});
+                const circ = el("circle", {r: 14, class: "tog-bg"});
                 circ.addEventListener("click", (e) => {
                     e.stopPropagation();
                     toggleCollapse(id);
