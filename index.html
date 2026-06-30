@@ -4252,7 +4252,14 @@ Rules (strict):
         let wasMobile = isMobile();
         window.addEventListener("resize", () => {
             const nowMobile = isMobile();
-            if (wasMobile && !nowMobile) {
+            if (!wasMobile && nowMobile) {
+                // 桌面 → 移动端：初始化移动端视图（默认显示树图）
+                treeWrapEl.classList.add("m-show");
+                document.getElementById("side").style.display = "none";
+                document.getElementById("tabTree").classList.add("active");
+                document.getElementById("tabChat").classList.remove("active");
+            } else if (wasMobile && !nowMobile) {
+                // 移动端 → 桌面：恢复双面板布局
                 const sEl = document.getElementById("side");
                 sEl.style.display = "";
                 treeWrapEl.classList.remove("m-show");
