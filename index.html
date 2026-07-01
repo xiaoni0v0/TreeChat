@@ -1983,10 +1983,23 @@
         }
     }
 
+    function normalizeNode(n) {
+        if (!Array.isArray(n.children)) n.children = [];
+        if (n.pending === undefined) n.pending = false;
+        if (n.reply === undefined) n.reply = "";
+        if (n.reasoning === undefined) n.reasoning = "";
+        if (!Array.isArray(n.attachments)) n.attachments = [];
+        if (n.model === undefined) n.model = null;
+        if (n.userTime === undefined) n.userTime = null;
+        if (n.replyTime === undefined) n.replyTime = null;
+        if (n.completed === undefined) n.completed = !n.pending;
+    }
+
     function freshTree() {
         nodes = {};
         rootId = "root";
         nodes[rootId] = {id: rootId, parent: null, user: null, reply: "", reasoning: "", children: [], pending: false};
+        normalizeNode(nodes[rootId]);
         _clearAtts();  // fire-and-forget: 清空 IndexedDB
         selId = rootId;
         pivotId = rootId;
@@ -2028,12 +2041,13 @@
                     Object.assign(view, d.view);
                     view.s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.s));
                 }
-                // 修复意外中断：上次关闭时正在生成的节点，标为"未完成"而非永久等待
+                // 修复意外中断 + 补全旧版本缺失字段
                 Object.values(nodes).forEach(n => {
                     if (n.pending) {
                         n.pending = false;
                         n.completed = false;
                     }
+                    normalizeNode(n);
                 });
                 // 从 IndexedDB 恢复附件
                 await _loadAtts();
@@ -2080,6 +2094,7 @@
             userTime: Date.now(),
             replyTime: null,
         };
+        normalizeNode(n);
         nodes[n.id] = n;
         nodes[parentId].children.push(n.id);
         return n;
@@ -4154,6 +4169,13 @@ Rules (strict):
                 if (!Array.isArray(cfg.collapsedIds)) cfg.collapsedIds = [];
                 if (!cfg.maxLines) cfg.maxLines = 3;
                 nodes = d.nodes;
+                Object.values(nodes).forEach(n => {
+                    if (n.pending) {
+                        n.pending = false;
+                        n.completed = false;
+                    }
+                    normalizeNode(n);
+                });
                 rootId = d.rootId;
                 selId = d.selId in d.nodes ? d.selId : d.rootId;
                 pivotId = (d.pivotId && d.nodes[d.pivotId]) ? d.pivotId : rootId;
