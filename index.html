@@ -268,19 +268,6 @@
             overflow: hidden
         }
 
-        .crumbs {
-            padding: 8px 14px;
-            border-bottom: 1px solid var(--line);
-            font-size: 12px;
-            color: var(--muted);
-            white-space: nowrap;
-            overflow: auto
-        }
-
-        .crumbs b {
-            color: var(--text);
-            font-weight: 600
-        }
 
         #conv-wrap {
             flex: 1;
@@ -1608,7 +1595,7 @@
 
     <div id="divider"></div>
     <div id="side">
-        <div class="crumbs" id="crumbs"></div>
+
         <div id="conv-wrap">
             <div id="conv"></div>
             <button id="scrollBottomBtn" title="滚动到底部">↓</button>
@@ -2472,10 +2459,6 @@
         });
         typeset(conv);
         conv.scrollTop = wasAtBottom ? conv.scrollHeight : savedScrollTop;
-
-        document.getElementById("crumbs").innerHTML =
-            path.map((n, i) => i === 0 ? "<b>根</b>" : trunc(n.user, 12))
-                .join(" <span style='opacity:.5'>›</span> ");
         document.getElementById("depthInfo").textContent = path.length - 1;
         document.getElementById("delBtn").style.visibility = selId === rootId ? "hidden" : "visible";
         document.getElementById("copyPathBtn").style.visibility = selId === rootId ? "hidden" : "visible";
